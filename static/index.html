@@ -1,0 +1,1796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>TinyTorch Visualizer</title>
+
+  <!-- KaTeX for LaTeX -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
+  <!-- Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0e27;
+      color: #e2e8f0;
+    }
+
+    #app { display: flex; height: 100vh; overflow: hidden; }
+
+    #canvas {
+      flex: 1 1 auto;
+      min-width: 320px;
+      position: relative;
+      overflow: auto;
+      background:
+        linear-gradient(#1a1f3a 1px, transparent 1px),
+        linear-gradient(90deg, #1a1f3a 1px, transparent 1px);
+      background-size: 30px 30px;
+      padding: 40px;
+    }
+    #canvas-content {
+      position: relative;
+      transform-origin: 0 0;
+      min-width: 4000px;
+      min-height: 2400px;
+      padding-top: 72px;
+    }
+
+    .v-resizer {
+      width: 6px;
+      min-width: 6px;
+      flex-shrink: 0;
+      background: #1e293b;
+      cursor: col-resize;
+      z-index: 100;
+      transition: background 0.2s;
+    }
+    .v-resizer:hover {
+      background: #3b82f6;
+    }
+
+    #editor {
+      flex: 0 0 460px;
+      min-width: 340px;
+      background: #0f1419;
+      border-left: 2px solid #1e293b;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 12px;
+    }
+    #editor h2 {
+      margin: 0;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-indicator {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e;
+    }
+    .status-indicator.disconnected { background: #ef4444; }
+    .status-indicator.connecting { background: #f59e0b; }
+    #code {
+      flex: 1;
+      background: #1a1f3a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      color: #e2e8f0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.5;
+      resize: none;
+    }
+    #run {
+      padding: 10px 24px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #run:hover { background: #2563eb; }
+    #run:disabled { background: #475569; cursor: not-allowed; }
+    #error { color: #ef4444; font-size: 12px; min-height: 20px; font-family: monospace; white-space: pre-wrap; }
+
+    #pdfSidebar {
+      flex: 1 1 340px;
+      min-width: 260px;
+      background: #020617;
+      border-left: 2px solid #1e293b;
+      display: flex;
+      flex-direction: column;
+    }
+    #pdfSidebarHeader {
+      padding: 8px 10px;
+      border-bottom: 1px solid #1f2937;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    .pdf-title { font-size: 11px; text-transform: uppercase; color: #9ca3af; }
+    .pdf-file-btn {
+      position: relative;
+      border-radius: 999px;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 11px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .pdf-file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .pdf-controls, .pdf-zoom { display: inline-flex; align-items: center; gap: 4px; }
+    .pdf-controls { margin-left: auto; }
+    .pdf-btn {
+      border: none;
+      border-radius: 999px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 3px 7px;
+      font-size: 11px;
+      cursor: pointer;
+      border: 1px solid #1f2937;
+    }
+    #pdfPageInfo, #pdfZoomValue { font-size: 11px; color: #9ca3af; min-width: 52px; text-align: center; }
+    #pdfViewerWrapper { flex: 1; overflow: auto; padding: 8px 10px 16px 10px; }
+    #pdfCanvas { display: none; background: #020617; border-radius: 8px; }
+    #pdfPlaceholder { font-size: 11px; color: #6b7280; padding: 10px; text-align: center; }
+
+    /* GROUPS */
+    .group-container {
+      position: absolute;
+      z-index: 2;
+      /* Debug: add visible background to see actual size */
+      /* background: rgba(255, 0, 0, 0.1); */
+    }
+    .layout-grid {
+      display: inline-grid;
+    }
+    .group-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #64748b;
+      margin-bottom: 8px;
+      font-weight: 600;
+      cursor: grab;
+      user-select: none;
+      white-space: nowrap;  /* Prevent wrapping */
+    }
+    .group-label:active { cursor: grabbing; }
+    .group-selected { box-shadow: 0 0 0 2px #3b82f6; border-radius: 8px; }
+
+    /* MATRIX CARDS */
+    .matrix-card {
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      display: inline-block;
+      min-width: 100px;
+    }
+    .matrix-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #3b82f6;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .matrix-shape { color: #64748b; font-weight: 500; }
+    .matrix-table { border-collapse: collapse; font-size: 13px; }
+    .matrix-table td {
+      border: 1px solid #334155;
+      padding: 6px 8px;
+      text-align: right;
+      background: #0f1419;
+      min-width: 50px;
+    }
+
+    .layout-grid { gap: 10px; }  /* display: inline-grid set above */
+    .layout-binary { 
+      grid-template-columns: auto auto; 
+      grid-template-rows: auto auto;
+      gap: 12px; 
+    }
+    .layout-unary { grid-template-columns: auto; }
+    .pos-left { grid-row: 1 / 3; grid-column: 1; align-self: center; }
+    .pos-top { grid-row: 1; grid-column: 2; }
+    .pos-result { grid-row: 2; grid-column: 2; }
+
+    /* TOOLBAR */
+    #toolbar {
+      position: sticky;
+      top: 0; left: 0;
+      z-index: 100;
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.95);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    }
+    .tool-btn {
+      border: none;
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #111827;
+      color: #e5e7eb;
+    }
+    .tool-btn:hover { background: #1f2937; }
+    .tool-btn.active { background: #3b82f6; color: white; }
+    .tool-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 8px;
+      padding-left: 8px;
+      border-left: 1px solid #1f2937;
+    }
+    .tool-label { font-size: 11px; text-transform: uppercase; color: #9ca3af; }
+    .tool-select {
+      background: #020617;
+      color: #e5e7eb;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+    .tool-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #9ca3af; }
+
+    /* LAYER BOXES */
+    .layer-box {
+      position: absolute;
+      border-radius: 12px;
+      border: 2px solid;
+      z-index: 1;
+    }
+    .layer-box-label {
+      position: absolute;
+      top: 6px; left: 12px; right: 12px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+      cursor: grab;
+      user-select: none;
+    }
+    .layer-box-label:active { cursor: grabbing; }
+    .layer-box-selected { box-shadow: 0 0 0 2px #f97316; }
+
+    /* NOTES */
+    .note-container {
+      position: absolute;
+      max-width: 300px;
+      background: rgba(15,23,42,0.97);
+      border-radius: 8px;
+      border: 1px solid #38bdf8;
+      padding: 8px 10px;
+      font-size: 12px;
+      z-index: 4;
+      cursor: grab;
+    }
+    .note-header { font-size: 10px; text-transform: uppercase; color: #7dd3fc; margin-bottom: 4px; cursor: grab; }
+    .note-body { font-size: 12px; line-height: 1.45; color: #e5e7eb; }
+
+    .note-modal-backdrop {
+      position: fixed; inset: 0; display: none;
+      background: rgba(0,0,0,0.5); z-index: 200;
+      align-items: center; justify-content: center;
+    }
+    .note-modal-backdrop.show { display: flex; }
+    .note-modal {
+      width: min(640px, 90vw);
+      background: #020617;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .note-modal-title { font-size: 14px; font-weight: 600; color: #e5e7eb; margin-bottom: 12px; }
+    #note-modal-textarea {
+      width: 100%; min-height: 200px;
+      border-radius: 8px; border: 1px solid #1f2937;
+      background: #0f1419; color: #e5e7eb;
+      padding: 12px; font-family: monospace; font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .note-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .note-modal-btn { border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+    #note-modal-cancel { background: #374151; color: #e5e7eb; }
+    #note-modal-delete { background: #dc2626; color: white; }
+    #note-modal-save { background: #3b82f6; color: white; }
+
+    /* ==================== RETRO/CRT MODE ==================== */
+    :root {
+      --retro-glass-bg: rgba(15, 15, 20, 0.65);
+      --retro-glass-border: rgba(255, 255, 255, 0.08);
+      --retro-neon-green: #00ff41;
+      --retro-neon-blue: #00f3ff;
+      --retro-text-primary: #e0e0e0;
+    }
+
+    /* Scanline background for body */
+    body.retro-mode {
+      background-color: #050505;
+      background-image: 
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%),
+        linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.02), rgba(0,0,255,0.03));
+      background-size: 100% 2px, 3px 100%;
+    }
+
+    /* Canvas gets CRT overlay */
+    body.retro-mode #canvas {
+      background: 
+        linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%),
+        linear-gradient(#0a0f0a 1px, transparent 1px),
+        linear-gradient(90deg, #0a0f0a 1px, transparent 1px);
+      background-size: 100% 2px, 30px 30px, 30px 30px;
+    }
+
+    /* Glassmorphism for editor panel */
+    body.retro-mode #editor {
+      background: var(--retro-glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-left: 1px solid var(--retro-glass-border);
+      box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Glassmorphism for toolbar */
+    body.retro-mode #toolbar {
+      background: var(--retro-glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--retro-glass-border);
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Matrix cards get glass effect */
+    body.retro-mode .matrix-card {
+      background: var(--retro-glass-bg);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid var(--retro-glass-border);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Group containers */
+    body.retro-mode .group-container {
+      background: rgba(10, 15, 10, 0.5);
+      border: 1px solid rgba(0, 255, 65, 0.15);
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.05);
+    }
+
+    /* Neon green for tensor values */
+    body.retro-mode .matrix-cell {
+      color: var(--retro-neon-green);
+      text-shadow: 0 0 3px rgba(0, 255, 65, 0.5);
+      font-family: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    }
+
+    /* Matrix labels glow blue */
+    body.retro-mode .matrix-label {
+      color: var(--retro-neon-blue);
+      text-shadow: 0 0 4px rgba(0, 243, 255, 0.4);
+    }
+
+    /* Shape badges */
+    body.retro-mode .shape-badge {
+      background: rgba(0, 255, 65, 0.15);
+      color: var(--retro-neon-green);
+      border: 1px solid rgba(0, 255, 65, 0.3);
+      text-shadow: 0 0 2px rgba(0, 255, 65, 0.5);
+    }
+
+    /* Code editor styling */
+    body.retro-mode #code {
+      background: rgba(5, 10, 5, 0.8);
+      color: var(--retro-neon-green);
+      text-shadow: 0 0 1px rgba(0, 255, 65, 0.3);
+      font-family: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+      border: 1px solid rgba(0, 255, 65, 0.2);
+    }
+
+    /* Run button gets gradient glow */
+    body.retro-mode #run {
+      background: linear-gradient(135deg, rgba(0, 100, 30, 0.8), rgba(0, 60, 20, 0.9));
+      border: 1px solid rgba(0, 255, 65, 0.4);
+      box-shadow: 0 0 15px rgba(0, 255, 65, 0.2);
+      text-shadow: 0 0 4px rgba(0, 255, 65, 0.5);
+    }
+
+    body.retro-mode #run:hover {
+      background: linear-gradient(135deg, rgba(0, 130, 40, 0.9), rgba(0, 80, 25, 0.95));
+      box-shadow: 0 0 25px rgba(0, 255, 65, 0.4);
+    }
+
+    /* Buttons get subtle glow */
+    body.retro-mode .tool-btn {
+      background: rgba(20, 30, 20, 0.7);
+      border: 1px solid rgba(0, 255, 65, 0.2);
+      color: var(--retro-text-primary);
+    }
+
+    body.retro-mode .tool-btn:hover {
+      background: rgba(0, 255, 65, 0.1);
+      border-color: rgba(0, 255, 65, 0.4);
+      box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+    }
+
+    body.retro-mode .tool-btn.active {
+      background: rgba(0, 255, 65, 0.2);
+      border-color: var(--retro-neon-green);
+      color: var(--retro-neon-green);
+      box-shadow: 0 0 12px rgba(0, 255, 65, 0.3);
+    }
+
+    /* Layer boxes get neon borders */
+    body.retro-mode .layer-box {
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    /* Op symbols */
+    body.retro-mode .op-symbol {
+      color: var(--retro-neon-blue);
+      text-shadow: 0 0 6px rgba(0, 243, 255, 0.6);
+    }
+
+    /* Group labels */
+    body.retro-mode .group-label {
+      color: var(--retro-neon-blue);
+      text-shadow: 0 0 3px rgba(0, 243, 255, 0.4);
+      font-family: 'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+    }
+
+    /* Error display */
+    body.retro-mode #error {
+      color: #ff4444;
+      text-shadow: 0 0 4px rgba(255, 68, 68, 0.5);
+    }
+
+    /* Status dot glow */
+    body.retro-mode .status-dot {
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    /* Running animation */
+    @keyframes retroDataFlow {
+      0% { box-shadow: 0 0 5px rgba(0, 255, 65, 0.3); }
+      50% { box-shadow: 0 0 20px rgba(0, 255, 65, 0.6), 0 0 30px rgba(0, 243, 255, 0.3); }
+      100% { box-shadow: 0 0 5px rgba(0, 255, 65, 0.3); }
+    }
+
+    body.retro-mode .group-container {
+      animation: retroDataFlow 2s ease-in-out infinite;
+      animation-play-state: paused;
+    }
+
+    body.retro-mode.running .group-container {
+      animation-play-state: running;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div id="canvas"></div>
+  <div class="v-resizer" data-left="canvas"></div>
+  <div id="editor">
+    <h2><span class="status-indicator" id="wsStatus"></span> TINYTORCH PYTHON CODE</h2>
+    <textarea id="code" spellcheck="false">
+# TinyTorch: 3-Layer Neural Network Example
+# Demonstrates: Layers, Activations, Loss Functions
+import numpy as np
+
+# === Create Sample Data ===
+# 4 samples, 8 input features
+X = Tensor(np.random.randn(4, 8))
+# Target: class indices for 3 classes
+y_true = Tensor([0, 1, 2, 1])
+
+# === Build 3-Layer Neural Network ===
+# Layer 1: Input(8) -> Hidden(16)
+layer1 = Linear(8, 16)
+relu1 = ReLU()
+
+# Layer 2: Hidden(16) -> Hidden(8) 
+layer2 = Linear(16, 8)
+relu2 = ReLU()
+
+# Layer 3: Hidden(8) -> Output(3)
+layer3 = Linear(8, 3)
+softmax = Softmax()
+
+# === Forward Pass ===
+# Layer 1
+z1 = layer1(X)
+a1 = relu1(z1)
+
+# Layer 2
+z2 = layer2(a1)
+a2 = relu2(z2)
+
+# Layer 3 (output)
+z3 = layer3(a2)
+y_pred = softmax(z3)
+
+# === Compute Loss ===
+loss_fn = MSELoss()
+# For MSE, create target probabilities
+target_probs = Tensor(np.eye(3)[[0, 1, 2, 1]])
+loss = loss_fn(y_pred, target_probs)
+
+# === Visualize Network Structure ===
+box("Layer 1: Linear + ReLU", [X, z1, a1], "2")
+box("Layer 2: Linear + ReLU", [a1, z2, a2], "3")
+box("Layer 3: Linear + Softmax", [a2, z3, y_pred], "4")
+box("Loss Computation", [y_pred, target_probs, loss], "6")
+    </textarea>
+    <button id="run">Run</button>
+    <div id="error"></div>
+  </div>
+  <div class="v-resizer" data-left="editor"></div>
+  <div id="pdfSidebar">
+    <div id="pdfSidebarHeader">
+      <span class="pdf-title">PDF REF</span>
+      <label class="pdf-file-btn">Load PDF<input type="file" id="pdfFileInput" accept="application/pdf"></label>
+      <div class="pdf-controls">
+        <button id="pdfPrev" class="pdf-btn">◀</button>
+        <span id="pdfPageInfo">- / -</span>
+        <button id="pdfNext" class="pdf-btn">▶</button>
+      </div>
+      <div class="pdf-zoom">
+        <button id="pdfZoomOut" class="pdf-btn">-</button>
+        <span id="pdfZoomValue">100%</span>
+        <button id="pdfZoomIn" class="pdf-btn">+</button>
+      </div>
+    </div>
+    <div id="pdfViewerWrapper">
+      <canvas id="pdfCanvas"></canvas>
+      <div id="pdfPlaceholder">Load a PDF to view it here.</div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="jsonFileInput" accept="application/json" style="display:none">
+
+<div id="note-modal-backdrop" class="note-modal-backdrop">
+  <div class="note-modal">
+    <div class="note-modal-title">Edit Note</div>
+    <textarea id="note-modal-textarea"></textarea>
+    <div style="font-size: 11px; color: #64748b; margin-bottom: 12px;">Supports Markdown and LaTeX: use $...$ for inline and $$...$$ for display math</div>
+    <div class="note-modal-actions">
+      <button id="note-modal-cancel" class="note-modal-btn">Cancel</button>
+      <button id="note-modal-delete" class="note-modal-btn">Delete</button>
+      <button id="note-modal-save" class="note-modal-btn">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ==================== PDF.js ====================
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  let pdfDoc = null, pdfPageNum = 1, pdfZoomFactor = 1.0;
+  function renderPdfPage(num) {
+    if (!pdfDoc) return;
+    pdfDoc.getPage(num).then(page => {
+      const wrapper = document.getElementById('pdfViewerWrapper');
+      const scale = (wrapper.clientWidth - 20) / page.getViewport({ scale: 1.0 }).width * pdfZoomFactor;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.getElementById('pdfCanvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      page.render({ canvasContext: canvas.getContext('2d'), viewport });
+      canvas.style.display = 'block';
+      document.getElementById('pdfPlaceholder').style.display = 'none';
+      document.getElementById('pdfPageInfo').textContent = `${num} / ${pdfDoc.numPages}`;
+      document.getElementById('pdfZoomValue').textContent = Math.round(scale * 100) + '%';
+    });
+  }
+  document.getElementById('pdfFileInput').onchange = e => {
+    const file = e.target.files[0];
+    if (!file || !window.pdfjsLib) return;
+    pdfjsLib.getDocument(URL.createObjectURL(file)).promise.then(doc => {
+      pdfDoc = doc; pdfPageNum = 1; pdfZoomFactor = 1.0;
+      renderPdfPage(1);
+    });
+  };
+  document.getElementById('pdfPrev').onclick = () => { if (pdfDoc && pdfPageNum > 1) renderPdfPage(--pdfPageNum); };
+  document.getElementById('pdfNext').onclick = () => { if (pdfDoc && pdfPageNum < pdfDoc.numPages) renderPdfPage(++pdfPageNum); };
+  document.getElementById('pdfZoomIn').onclick = () => { pdfZoomFactor = Math.min(3, pdfZoomFactor * 1.1); renderPdfPage(pdfPageNum); };
+  document.getElementById('pdfZoomOut').onclick = () => { pdfZoomFactor = Math.max(0.3, pdfZoomFactor / 1.1); renderPdfPage(pdfPageNum); };
+
+  // ==================== WebSocket ====================
+  let ws = null, wsConnected = false;
+  function connectWebSocket() {
+    document.getElementById('wsStatus').className = 'status-indicator connecting';
+    ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
+    ws.onopen = () => { wsConnected = true; document.getElementById('wsStatus').className = 'status-indicator'; document.getElementById('run').disabled = false; };
+    ws.onclose = () => { wsConnected = false; document.getElementById('wsStatus').className = 'status-indicator disconnected'; document.getElementById('run').disabled = true; setTimeout(connectWebSocket, 2000); };
+    ws.onerror = () => { document.getElementById('wsStatus').className = 'status-indicator disconnected'; };
+    ws.onmessage = e => { try { handleMessage(JSON.parse(e.data)); } catch(err) { console.error(err); } };
+  }
+
+  // ==================== State ====================
+  const tensors = {};
+  const groups = [];
+  const pendingBoxes = [];
+  const boxes = [];
+  const canvasNotes = [];
+  let skipLayout = false;  // Flag to preserve positions when loading from JSON
+  let currentTool = 'select';
+  let showMatrixData = true;
+  let zoomLevel = 1;
+  let nextGroupId = 1;
+  let nextBoxId = 1;
+  const selectedGroupIds = new Set();
+  const selectedBoxIds = new Set();
+
+  // ==================== Message Handling ====================
+  function handleMessage(msg) {
+    switch (msg.event) {
+      case 'reset':
+        Object.keys(tensors).forEach(k => delete tensors[k]);
+        groups.length = 0;
+        pendingBoxes.length = 0;
+        boxes.length = 0;
+        nextGroupId = 1;
+        nextBoxId = 1;
+        document.getElementById('error').textContent = '';
+        break;
+      case 'tensor':
+        tensors[msg.id] = { id: msg.id, shape: msg.shape, data: msg.data, name: msg.name };
+        break;
+      case 'op':
+        // Store tensor IDs, not resolved tensors - we'll resolve at render time
+        // to get updated names from __auto_name__
+        groups.push({
+          id: 'g' + nextGroupId++,
+          opType: msg.type,
+          inputIds: msg.inputs,
+          outputId: msg.output,
+          meta: msg.meta || {},
+          x: 0, y: 0
+        });
+        break;
+      case 'box':
+        pendingBoxes.push({ label: msg.label, tensorIds: msg.tensors, scheme: msg.scheme || '1', parent: msg.parentBox });
+        break;
+      case 'error':
+        document.getElementById('error').textContent = msg.message;
+        break;
+      case 'done':
+        layoutAndRender();
+        break;
+    }
+  }
+
+  // ==================== Layout ====================
+  function layoutAndRender() {
+    // First render pass: create elements to measure sizes, then create boxes
+    renderFirstPass();
+  }
+  
+  // Create boxes from pending box() calls - following original implementation
+  function createPendingBoxes(groupElById) {
+    const PAD = 20;           // Consistent padding on all sides
+    const LABEL_H = 24;       // Height reserved for label
+    const CHILD_GAP_X = 30;   // Gap between sibling child boxes
+    const COL_GAP = 30;       // Gap between columns within a box
+    const CHILD_GAP_Y = 20;  // Gap after each child
+    const ROW_GAP = 30;
+    const LEFT_MARGIN = 80;
+    
+    // Track cursor position for laying out content
+    let layoutCursorY = 100;
+    
+    // Track which groups have been claimed by boxes (to prevent double-counting)
+    const claimedGroupIds = new Set();
+    
+    // Map tensor IDs to group IDs (only unclaimed groups)
+    function getGroupIdsForTensors(tensorIds) {
+      const gids = [];
+      tensorIds.forEach(tid => {
+        const g = groups.find(gr => gr.outputId === tid);
+        if (g && !gids.includes(g.id) && !claimedGroupIds.has(g.id)) {
+          gids.push(g.id);
+        }
+      });
+      return gids;
+    }
+    
+    // Build parent-child relationships using explicit parentBox field
+    const boxesByLabel = {};
+    const rootBoxes = [];
+    
+    pendingBoxes.forEach(pb => {
+      boxesByLabel[pb.label] = pb;
+      if (!pb.parent) {
+        rootBoxes.push(pb);
+      }
+    });
+    
+    // Recursive function to create box hierarchy
+    function createBoxHierarchy(pending, startY, startX) {
+      const contentTop = startY + LABEL_H + PAD;
+      
+      // Find children of this box
+      const children = pendingBoxes.filter(p => p.parent === pending.label);
+      const allGroupIds = getGroupIdsForTensors(pending.tensorIds);
+      
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      let cursorY = contentTop;
+      let cursorX = startX + PAD;
+      
+      function includeRect(x1, y1, x2, y2) {
+        minX = Math.min(minX, x1);
+        minY = Math.min(minY, y1);
+        maxX = Math.max(maxX, x2);
+        maxY = Math.max(maxY, y2);
+      }
+      
+      // Create this box
+      const box = {
+        id: 'b' + nextBoxId++,
+        label: pending.label,
+        scheme: pending.scheme || '1',
+        x: startX,
+        y: startY,
+        w: 100,
+        h: LABEL_H + 50,
+        groupIds: [],
+        childBoxIds: [],
+        fromCode: true
+      };
+      boxes.push(box);
+      
+      // 1) Create children first - position them SIDE BY SIDE
+      const childGroupIdSet = new Set();
+      let childMaxHeight = 0;
+      
+      children.forEach(childPending => {
+        const child = createBoxHierarchy(childPending, contentTop, cursorX);
+        if (!child) return;
+        box.childBoxIds.push(child.id);
+        
+        // Collect all groups used by this child
+        (child.groupIds || []).forEach(gid => childGroupIdSet.add(gid));
+        // Also collect groups from grandchildren recursively
+        function collectChildGroups(b) {
+          (b.groupIds || []).forEach(gid => childGroupIdSet.add(gid));
+          (b.childBoxIds || []).forEach(cid => {
+            const cb = boxes.find(bb => bb.id === cid);
+            if (cb) collectChildGroups(cb);
+          });
+        }
+        collectChildGroups(child);
+        
+        includeRect(child.x, child.y, child.x + child.w, child.y + child.h);
+        childMaxHeight = Math.max(childMaxHeight, child.h);
+        cursorX = child.x + child.w + CHILD_GAP_X;
+      });
+      
+      if (children.length > 0) {
+        cursorY = contentTop + childMaxHeight + CHILD_GAP_Y;
+      }
+      
+      // 2) Layout this box's OWN groups (exclude groups used by children)
+      const ownGroupIds = allGroupIds.filter(id => !childGroupIdSet.has(id));
+      
+      if (ownGroupIds.length > 0) {
+        // Layout in two columns
+        const nLeft = Math.ceil(ownGroupIds.length / 2);
+        const leftIds = ownGroupIds.slice(0, nLeft);
+        const rightIds = ownGroupIds.slice(nLeft);
+        
+        let leftX = startX + PAD;
+        let rightX = leftX;
+        let yL = cursorY, yR = cursorY;
+        let maxLeftW = 0, maxRightW = 0;
+        
+        // Measure and position left column
+        leftIds.forEach(gid => {
+          const g = groups.find(gr => gr.id === gid);
+          const el = groupElById[gid];
+          if (g && el) {
+            g.x = leftX;
+            g.y = yL;
+            el.style.left = g.x + 'px';
+            el.style.top = g.y + 'px';
+            // Use offsetWidth/Height (unaffected by zoom transform)
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            maxLeftW = Math.max(maxLeftW, w);
+            includeRect(g.x, g.y, g.x + w, g.y + h);
+            yL += h + ROW_GAP;
+          }
+        });
+        
+        rightX = leftX + maxLeftW + COL_GAP;
+        
+        // Measure and position right column
+        rightIds.forEach(gid => {
+          const g = groups.find(gr => gr.id === gid);
+          const el = groupElById[gid];
+          if (g && el) {
+            g.x = rightX;
+            g.y = yR;
+            el.style.left = g.x + 'px';
+            el.style.top = g.y + 'px';
+            // Use offsetWidth/Height (unaffected by zoom transform)
+            const w = el.offsetWidth;
+            const h = el.offsetHeight;
+            maxRightW = Math.max(maxRightW, w);
+            includeRect(g.x, g.y, g.x + w, g.y + h);
+            yR += h + ROW_GAP;
+          }
+        });
+        
+        box.groupIds = ownGroupIds.slice();
+        // Mark these groups as claimed so other boxes don't reuse them
+        ownGroupIds.forEach(gid => claimedGroupIds.add(gid));
+        cursorY = Math.max(yL, yR);
+      }
+      
+      // 3) Finalize box bounds
+      if (isFinite(minX)) {
+        box.x = minX - PAD;
+        box.y = minY - PAD - LABEL_H;
+        box.w = (maxX - minX) + 2 * PAD;
+        box.h = (maxY - minY) + 2 * PAD + LABEL_H;
+      }
+      
+      return box;
+    }
+    
+    // Only process pending boxes if there are any
+    if (pendingBoxes.length > 0) {
+      // Create root boxes
+      rootBoxes.forEach(rootPending => {
+        const rootBox = createBoxHierarchy(rootPending, layoutCursorY, LEFT_MARGIN);
+        if (rootBox) {
+          layoutCursorY = rootBox.y + rootBox.h + 50;
+        }
+      });
+      
+      pendingBoxes.length = 0;
+    }
+    
+    // Layout any orphan groups (not in any box) - this runs ALWAYS
+    const groupsInBoxes = new Set();
+    boxes.forEach(b => (b.groupIds || []).forEach(gid => groupsInBoxes.add(gid)));
+    const orphanGroupIds = groups.filter(g => !groupsInBoxes.has(g.id)).map(g => g.id);
+    
+    if (orphanGroupIds.length > 0) {
+      layoutGroupsTwoColumns(orphanGroupIds, groupElById, layoutCursorY, LEFT_MARGIN, true);
+    }
+  }
+
+  // Layout groups in two columns with measured sizes
+  // If forceLayout is false, groups with existing positions are kept
+  function layoutGroupsTwoColumns(groupIds, groupElById, startY, leftMargin, forceLayout = true) {
+    const COL_GAP = 80;  // Gap between columns
+    const ROW_GAP = 50;  // Gap between rows
+    
+    if (!groupIds.length) return null;
+    
+    // Measure all groups
+    const sizes = {};
+    let maxLeftW = 0, maxRightW = 0;
+    
+    // Split into two columns: left gets ceil(n/2)
+    const nLeft = Math.ceil(groupIds.length / 2);
+    const leftIds = groupIds.slice(0, nLeft);
+    const rightIds = groupIds.slice(nLeft);
+    
+    // Measure left column
+    leftIds.forEach(id => {
+      const el = groupElById[id];
+      const w = el ? el.offsetWidth : 200;
+      const h = el ? el.offsetHeight : 150;
+      sizes[id] = { w, h };
+      maxLeftW = Math.max(maxLeftW, w);
+    });
+    
+    // Measure right column
+    rightIds.forEach(id => {
+      const el = groupElById[id];
+      const w = el ? el.offsetWidth : 200;
+      const h = el ? el.offsetHeight : 150;
+      sizes[id] = { w, h };
+      maxRightW = Math.max(maxRightW, w);
+    });
+    
+    const leftX = leftMargin;
+    const rightX = leftX + maxLeftW + COL_GAP;
+    
+    // Position left column
+    let yL = startY;
+    leftIds.forEach(id => {
+      const g = groups.find(gr => gr.id === id);
+      if (!g) return;
+      // Only set position if not already positioned or forceLayout
+      if (forceLayout || (g.x === undefined || g.x === 0)) {
+        g.x = leftX;
+        g.y = yL;
+      }
+      const el = groupElById[id];
+      if (el) {
+        el.style.left = g.x + 'px';
+        el.style.top = g.y + 'px';
+      }
+      yL += sizes[id].h + ROW_GAP;
+    });
+    
+    // Position right column
+    let yR = startY;
+    rightIds.forEach(id => {
+      const g = groups.find(gr => gr.id === id);
+      if (!g) return;
+      // Only set position if not already positioned or forceLayout
+      if (forceLayout || (g.x === undefined || g.x === 0)) {
+        g.x = rightX;
+        g.y = yR;
+      }
+      const el = groupElById[id];
+      if (el) {
+        el.style.left = g.x + 'px';
+        el.style.top = g.y + 'px';
+      }
+      yR += sizes[id].h + ROW_GAP;
+    });
+    
+    // Compute bounding box based on actual positions
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    groupIds.forEach(id => {
+      const g = groups.find(gr => gr.id === id);
+      const sz = sizes[id];
+      if (!g || !sz) return;
+      minX = Math.min(minX, g.x);
+      minY = Math.min(minY, g.y);
+      maxX = Math.max(maxX, g.x + sz.w);
+      maxY = Math.max(maxY, g.y + sz.h);
+    });
+    
+    return { minX, minY, maxX, maxY, lastY: Math.max(yL, yR) };
+  }
+
+  // First pass: render groups without layout to measure
+  function renderFirstPass() {
+    const canvas = document.getElementById('canvas');
+    canvas.innerHTML = '';
+    
+    // Add toolbar
+    canvas.appendChild(createToolbar());
+    
+    const content = document.createElement('div');
+    content.id = 'canvas-content';
+    canvas.appendChild(content);
+    
+    const groupElById = {};
+    
+    // Helper to generate label from group data using current tensor names
+    function getGroupLabel(g) {
+      const output = tensors[g.outputId];
+      const inputs = (g.inputIds || []).map(id => tensors[id]).filter(Boolean);
+      const outputName = output?.name || g.opType;
+      const inputNames = inputs.map(t => t.name || t.id).join(', ');
+      return `${outputName} = ${g.opType}(${inputNames})`;
+    }
+    
+    // Helper to build op object from group data
+    function getGroupOp(g) {
+      const output = tensors[g.outputId];
+      const inputs = (g.inputIds || []).map(id => tensors[id]).filter(Boolean);
+      return { type: g.opType, inputs, output, meta: g.meta || {} };
+    }
+    
+    // Render all groups at temporary positions to measure
+    groups.forEach(g => {
+      const el = document.createElement('div');
+      el.className = 'group-container';
+      el.dataset.groupId = g.id;
+      el.style.left = '0px';
+      el.style.top = '0px';
+      el.style.visibility = 'hidden'; // Hidden during measurement
+      
+      const label = document.createElement('div');
+      label.className = 'group-label';
+      label.textContent = getGroupLabel(g);
+      el.appendChild(label);
+      
+      renderOp(el, getGroupOp(g));
+      content.appendChild(el);
+      groupElById[g.id] = el;
+    });
+    
+    // Force layout calculation
+    content.offsetHeight;
+    
+    // If skipLayout is set, just position groups using their saved coordinates
+    if (skipLayout) {
+      const PAD = 20;
+      const LABEL_H = 24;
+      
+      // Use saved positions - no layout calculation
+      groups.forEach(g => {
+        const el = groupElById[g.id];
+        if (el) {
+          el.style.left = (g.x || 0) + 'px';
+          el.style.top = (g.y || 0) + 'px';
+        }
+      });
+      
+      // Recompute box bounds (supports nested boxes)
+      function recomputeBoxBounds(box) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        
+        // Include direct groups
+        (box.groupIds || []).forEach(gid => {
+          const g = groups.find(gr => gr.id === gid);
+          const el = groupElById[gid];
+          if (g && el) {
+            minX = Math.min(minX, g.x || 0);
+            minY = Math.min(minY, g.y || 0);
+            maxX = Math.max(maxX, (g.x || 0) + el.offsetWidth);
+            maxY = Math.max(maxY, (g.y || 0) + el.offsetHeight);
+          }
+        });
+        
+        // Include child boxes
+        (box.childBoxIds || []).forEach(bid => {
+          const childBox = boxes.find(b => b.id === bid);
+          if (childBox) {
+            if (childBox.w <= 0) recomputeBoxBounds(childBox);
+            if (childBox.w > 0) {
+              minX = Math.min(minX, childBox.x);
+              minY = Math.min(minY, childBox.y);
+              maxX = Math.max(maxX, childBox.x + childBox.w);
+              maxY = Math.max(maxY, childBox.y + childBox.h);
+            }
+          }
+        });
+        
+        if (minX < Infinity) {
+          box.x = minX - PAD;
+          box.y = minY - PAD - LABEL_H;
+          box.w = (maxX - minX) + 2 * PAD;
+          box.h = (maxY - minY) + 2 * PAD + LABEL_H;
+        }
+      }
+      
+      boxes.forEach(recomputeBoxBounds);
+      skipLayout = false;  // Reset flag
+    } else {
+      // Create boxes from pending box() calls - this handles all layout
+      createPendingBoxes(groupElById);
+    }
+    
+    // Make groups visible and attach behaviors
+    groups.forEach(g => {
+      const el = groupElById[g.id];
+      if (el) {
+        el.style.visibility = 'visible';
+        el.style.left = g.x + 'px';
+        el.style.top = g.y + 'px';
+      }
+    });
+    
+    // Now do final render with boxes
+    renderFinal(groupElById);
+  }
+
+  function createToolbar() {
+    const toolbar = document.createElement('div');
+    toolbar.id = 'toolbar';
+    
+    function addBtn(label, onClick, isTool, toolName) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.className = 'tool-btn' + (isTool && currentTool === toolName ? ' active' : '');
+      btn.onclick = onClick;
+      toolbar.appendChild(btn);
+    }
+    
+    addBtn('Select', () => { currentTool = 'select'; selectedGroupIds.clear(); selectedBoxIds.clear(); render(); }, true, 'select');
+    addBtn('Add Note', addNote);
+    addBtn('Export JSON', exportJson);
+    addBtn('Load JSON', () => document.getElementById('jsonFileInput').click());
+    
+    const vg = document.createElement('div');
+    vg.className = 'tool-group';
+    vg.innerHTML = '<span class="tool-label">View</span>';
+    const sel = document.createElement('select');
+    sel.className = 'tool-select';
+    [25, 50, 75, 100, 125, 150].forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = p + '%';
+      if (p === Math.round(zoomLevel * 100)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => { zoomLevel = parseInt(sel.value) / 100; applyZoom(); };
+    vg.appendChild(sel);
+    
+    const dt = document.createElement('label');
+    dt.className = 'tool-toggle';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = showMatrixData;
+    cb.onchange = () => { showMatrixData = cb.checked; render(); };
+    dt.appendChild(cb);
+    dt.appendChild(document.createTextNode(' Data'));
+    vg.appendChild(dt);
+    
+    // Retro mode toggle
+    const rt = document.createElement('label');
+    rt.className = 'tool-toggle';
+    rt.style.marginLeft = '12px';
+    const rcb = document.createElement('input');
+    rcb.type = 'checkbox';
+    rcb.checked = document.body.classList.contains('retro-mode');
+    rcb.onchange = () => {
+      document.body.classList.toggle('retro-mode', rcb.checked);
+      localStorage.setItem('retroMode', rcb.checked ? '1' : '0');
+    };
+    rt.appendChild(rcb);
+    rt.appendChild(document.createTextNode(' Retro'));
+    vg.appendChild(rt);
+    
+    toolbar.appendChild(vg);
+    
+    return toolbar;
+  }
+
+  function renderFinal(groupElById) {
+    const content = document.getElementById('canvas-content');
+    
+    // Sort boxes: parent boxes first (larger), child boxes last (smaller)
+    // This ensures parent boxes are rendered behind child boxes
+    const sortedBoxes = [...boxes].sort((a, b) => {
+      // Boxes with more area go first (behind)
+      const areaA = (a.w || 0) * (a.h || 0);
+      const areaB = (b.w || 0) * (b.h || 0);
+      return areaB - areaA;  // Larger boxes first
+    });
+    
+    // Draw boxes - larger ones first (behind), smaller ones after (in front)
+    sortedBoxes.forEach(box => {
+      if (box.w <= 0 || box.h <= 0) return;
+      
+      const colors = getBoxColors(box.scheme);
+      const el = document.createElement('div');
+      el.className = 'layer-box';
+      el.dataset.boxId = box.id;
+      el.style.left = box.x + 'px';
+      el.style.top = box.y + 'px';
+      el.style.width = box.w + 'px';
+      el.style.height = box.h + 'px';
+      el.style.borderColor = colors.border;
+      el.style.background = colors.bg;
+      
+      if (selectedBoxIds.has(box.id)) el.classList.add('layer-box-selected');
+      
+      const lbl = document.createElement('div');
+      lbl.className = 'layer-box-label';
+      lbl.textContent = box.label;
+      lbl.style.color = colors.label;
+      el.appendChild(lbl);
+      
+      attachBoxDrag(box, el, lbl, groupElById);
+      content.insertBefore(el, content.firstChild);
+    });
+    
+    // Attach drag behavior to groups
+    groups.forEach(g => {
+      const el = groupElById[g.id];
+      if (!el) return;
+      const labelEl = el.querySelector('.group-label');
+      if (labelEl) attachGroupDrag(g, el, labelEl);
+    });
+    
+    // Render notes
+    canvasNotes.forEach(note => {
+      const el = document.createElement('div');
+      el.className = 'note-container';
+      el.style.left = note.x + 'px';
+      el.style.top = note.y + 'px';
+      
+      const header = document.createElement('div');
+      header.className = 'note-header';
+      header.textContent = 'NOTE';
+      el.appendChild(header);
+      
+      const body = document.createElement('div');
+      body.className = 'note-body';
+      // Parse markdown and then render LaTeX
+      let html = window.marked ? marked.parse(note.text) : note.text;
+      body.innerHTML = html;
+      // Render LaTeX with KaTeX
+      renderLatexInElement(body);
+      el.appendChild(body);
+      
+      attachNoteDrag(note, el, header);
+      el.ondblclick = () => openNoteModal(note);
+      content.appendChild(el);
+    });
+    
+    // Click canvas to deselect
+    content.onclick = e => {
+      if (e.target === content && currentTool === 'select') {
+        selectedGroupIds.clear();
+        selectedBoxIds.clear();
+        render();
+      }
+    };
+    
+    applyZoom();
+  }
+
+  // ==================== Tensor to 2D ====================
+  // orientation: 'auto' (default), 'row' (1×N), or 'col' (N×1) for 1D tensors
+  function tensorTo2D(t, orientation = 'auto') {
+    if (!t || !t.data) return { mat: [[]], shape: [] };
+    const flat = [];
+    (function f(x) { Array.isArray(x) ? x.forEach(f) : flat.push(x); })(t.data);
+    let shape = t.shape || [];
+    if (shape.length === 0) shape = [1, 1];
+    else if (shape.length === 1) {
+      // For 1D tensors, use orientation hint
+      if (orientation === 'row') {
+        shape = [1, shape[0]];  // Display as row vector (1×N)
+      } else {
+        shape = [shape[0], 1];  // Display as column vector (N×1) - default
+      }
+    }
+    const [rows, cols] = [shape[0], shape[1]];
+    const mat = [];
+    for (let r = 0, i = 0; r < rows; r++) {
+      const row = [];
+      for (let c = 0; c < cols; c++) {
+        const v = flat[i++];
+        row.push(typeof v === 'number' && isFinite(v) ? v.toFixed(4) : String(v ?? ''));
+      }
+      mat.push(row);
+    }
+    return { mat, shape };
+  }
+
+  function createMatrixCard(label, tensor, orientation = 'auto') {
+    const { mat, shape: displayShape } = tensorTo2D(tensor, orientation);
+    // Use display shape (2D) for consistent formatting - always shows rows×cols
+    const shapeStr = displayShape.join('×');
+    const card = document.createElement('div');
+    card.className = 'matrix-card';
+    card.innerHTML = `<div class="matrix-title"><span>${label}</span><span class="matrix-shape">${shapeStr}</span></div>`;
+    if (showMatrixData && mat.length > 0 && mat[0].length > 0) {
+      const table = document.createElement('table');
+      table.className = 'matrix-table';
+      const MAX_ROWS = 4, MAX_COLS = 6;
+      const totalR = mat.length, totalC = mat[0].length;
+      const showR = Math.min(totalR, MAX_ROWS), showC = Math.min(totalC, MAX_COLS);
+      const truncatedR = totalR > MAX_ROWS, truncatedC = totalC > MAX_COLS;
+      
+      for (let r = 0; r < showR; r++) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < showC; c++) {
+          const td = document.createElement('td');
+          td.textContent = mat[r][c];
+          tr.appendChild(td);
+        }
+        // Add column ellipsis if truncated
+        if (truncatedC) {
+          const td = document.createElement('td');
+          td.textContent = '…';
+          td.style.color = '#64748b';
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      // Add row ellipsis if truncated
+      if (truncatedR) {
+        const tr = document.createElement('tr');
+        for (let c = 0; c < showC + (truncatedC ? 1 : 0); c++) {
+          const td = document.createElement('td');
+          td.textContent = c === 0 ? '⋮' : '';
+          td.style.color = '#64748b';
+          tr.appendChild(td);
+        }
+        table.appendChild(tr);
+      }
+      card.appendChild(table);
+    }
+    return card;
+  }
+
+  // ==================== Render Operation ====================
+  function renderOp(container, op) {
+    const { type, inputs, output, meta } = op;
+    const isBinary = ['matmul', 'add', 'sub', 'mul', 'div'].includes(type) && inputs.length >= 2;
+    
+    // Determine output orientation for reduction operations
+    let outputOrientation = 'auto';
+    if (['sum', 'mean', 'max'].includes(type) && inputs[0] && output.shape && output.shape.length === 1) {
+      const inputShape = inputs[0].shape || [];
+      const axis = meta?.axis ?? meta?.arg0;  // axis could be in 'axis' or 'arg0'
+      
+      if (inputShape.length >= 2) {
+        // Normalize axis (handle negative indices)
+        let normalizedAxis = axis;
+        if (normalizedAxis < 0) normalizedAxis = inputShape.length + normalizedAxis;
+        
+        // axis=0 reduces rows → result corresponds to columns → display as row
+        // axis=1 or axis=-1 (last) reduces columns → result corresponds to rows → display as col
+        if (normalizedAxis === 0) {
+          outputOrientation = 'row';  // Column-wise reduction → horizontal result
+        } else {
+          outputOrientation = 'col';  // Row-wise reduction → vertical result
+        }
+      }
+    }
+    
+    const grid = document.createElement('div');
+    grid.className = 'layout-grid ' + (isBinary ? 'layout-binary' : 'layout-unary');
+    
+    if (isBinary) {
+      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]);
+      left.classList.add('pos-left');
+      grid.appendChild(left);
+      
+      const top = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1]);
+      top.classList.add('pos-top');
+      grid.appendChild(top);
+      
+      const res = createMatrixCard(output.name || type, output, outputOrientation);
+      res.classList.add('pos-result');
+      grid.appendChild(res);
+    } else {
+      if (inputs[0]) {
+        grid.appendChild(createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]));
+      }
+      grid.appendChild(createMatrixCard(output.name || type, output, outputOrientation));
+    }
+    
+    container.appendChild(grid);
+  }
+
+  // ==================== Box Colors ====================
+  function getBoxColors(scheme) {
+    const c = {
+      '1': { border: 'rgba(56,189,248,0.9)', bg: 'rgba(15,23,42,0.45)', label: '#7dd3fc' },
+      '2': { border: 'rgba(34,197,94,0.85)', bg: 'rgba(5,46,22,0.5)', label: '#bbf7d0' },
+      '3': { border: 'rgba(249,115,22,0.9)', bg: 'rgba(67,20,7,0.55)', label: '#fed7aa' },
+      '4': { border: 'rgba(129,140,248,0.9)', bg: 'rgba(30,64,175,0.5)', label: '#e0e7ff' },
+      '5': { border: 'rgba(244,114,182,0.9)', bg: 'rgba(131,24,67,0.5)', label: '#fce7f3' },
+      '6': { border: 'rgba(248,113,113,0.9)', bg: 'rgba(127,29,29,0.5)', label: '#fee2e2' },
+    };
+    return c[scheme] || c['1'];
+  }
+
+  // ==================== LaTeX Rendering ====================
+  function renderLatexInElement(el) {
+    if (!window.katex) return;
+    
+    // Process display math: $$...$$
+    el.innerHTML = el.innerHTML.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
+      try {
+        return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false });
+      } catch (e) {
+        return match;
+      }
+    });
+    
+    // Process inline math: $...$
+    el.innerHTML = el.innerHTML.replace(/\$([^\$]+?)\$/g, (match, tex) => {
+      try {
+        return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false });
+      } catch (e) {
+        return match;
+      }
+    });
+  }
+
+  // ==================== Main Render ====================
+  function render() {
+    // Re-render using the first pass layout system
+    renderFirstPass();
+  }
+
+  function applyZoom() {
+    const c = document.getElementById('canvas-content');
+    if (c) c.style.transform = `scale(${zoomLevel})`;
+  }
+
+  // ==================== Drag Behaviors ====================
+  function attachGroupDrag(group, el, labelEl) {
+    // Make entire group container draggable
+    el.onmousedown = function(e) {
+      // Don't start drag on matrix cards if just clicking
+      if (e.target.closest('.matrix-card') && !e.target.closest('.group-label')) {
+        // Allow clicking but not dragging from matrix cards
+      }
+      
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // If box tool is active, toggle selection for box creation
+      if (currentTool === 'box') {
+        if (selectedGroupIds.has(group.id)) {
+          selectedGroupIds.delete(group.id);
+          el.classList.remove('group-selected');
+        } else {
+          selectedGroupIds.add(group.id);
+          el.classList.add('group-selected');
+        }
+        return;
+      }
+      
+      // Select tool: drag the group
+      selectedGroupIds.clear();
+      selectedGroupIds.add(group.id);
+      el.classList.add('group-selected');
+      
+      const startX = e.clientX, startY = e.clientY;
+      const origX = group.x, origY = group.y;
+      
+      function onMove(ev) {
+        const dx = (ev.clientX - startX) / zoomLevel;
+        const dy = (ev.clientY - startY) / zoomLevel;
+        group.x = origX + dx;
+        group.y = origY + dy;
+        el.style.left = group.x + 'px';
+        el.style.top = group.y + 'px';
+      }
+      
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+  }
+
+  function attachBoxDrag(box, el, labelEl, groupElById) {
+    labelEl.onmousedown = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      selectedBoxIds.clear();
+      selectedBoxIds.add(box.id);
+      el.classList.add('layer-box-selected');
+      
+      const startX = e.clientX, startY = e.clientY;
+      const boxStart = { x: box.x, y: box.y };
+      
+      // Collect all groups to move (direct groups + groups from child boxes)
+      const groupStarts = {};
+      const childBoxStarts = {};
+      
+      function collectGroupsFromBox(b) {
+        (b.groupIds || []).forEach(gid => {
+          const g = groups.find(gr => gr.id === gid);
+          if (g && !groupStarts[gid]) groupStarts[gid] = { x: g.x, y: g.y };
+        });
+        // Recursively collect from child boxes
+        (b.childBoxIds || []).forEach(cid => {
+          const childBox = boxes.find(cb => cb.id === cid);
+          if (childBox) {
+            childBoxStarts[cid] = { x: childBox.x, y: childBox.y };
+            collectGroupsFromBox(childBox);
+          }
+        });
+      }
+      collectGroupsFromBox(box);
+      
+      function onMove(ev) {
+        const dx = (ev.clientX - startX) / zoomLevel;
+        const dy = (ev.clientY - startY) / zoomLevel;
+        
+        // Move this box
+        box.x = boxStart.x + dx;
+        box.y = boxStart.y + dy;
+        el.style.left = box.x + 'px';
+        el.style.top = box.y + 'px';
+        
+        // Move child boxes
+        Object.keys(childBoxStarts).forEach(cid => {
+          const childBox = boxes.find(cb => cb.id === cid);
+          const childEl = document.querySelector(`[data-box-id="${cid}"]`);
+          if (childBox) {
+            childBox.x = childBoxStarts[cid].x + dx;
+            childBox.y = childBoxStarts[cid].y + dy;
+            if (childEl) {
+              childEl.style.left = childBox.x + 'px';
+              childEl.style.top = childBox.y + 'px';
+            }
+          }
+        });
+        
+        // Move all groups
+        Object.keys(groupStarts).forEach(gid => {
+          const g = groups.find(gr => gr.id === gid);
+          const gEl = groupElById[gid];
+          if (g && gEl) {
+            g.x = groupStarts[gid].x + dx;
+            g.y = groupStarts[gid].y + dy;
+            gEl.style.left = g.x + 'px';
+            gEl.style.top = g.y + 'px';
+          }
+        });
+      }
+      
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+    
+    // Click to select
+    el.onclick = e => {
+      e.stopPropagation();
+      
+      // In Box mode, toggle selection for nesting
+      if (currentTool === 'box') {
+        if (selectedBoxIds.has(box.id)) {
+          selectedBoxIds.delete(box.id);
+          el.classList.remove('layer-box-selected');
+        } else {
+          selectedBoxIds.add(box.id);
+          el.classList.add('layer-box-selected');
+        }
+        render();
+        return;
+      }
+      
+      // Select mode
+      selectedBoxIds.clear();
+      selectedBoxIds.add(box.id);
+      render();
+    };
+  }
+
+  function attachNoteDrag(note, el, header) {
+    header.onmousedown = function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      const startX = e.clientX, startY = e.clientY;
+      const origX = note.x, origY = note.y;
+      
+      function onMove(ev) {
+        note.x = origX + (ev.clientX - startX) / zoomLevel;
+        note.y = origY + (ev.clientY - startY) / zoomLevel;
+        el.style.left = note.x + 'px';
+        el.style.top = note.y + 'px';
+      }
+      
+      function onUp() {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      }
+      
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+  }
+
+  // ==================== Notes ====================
+  let editingNote = null;
+  function addNote() {
+    canvasNotes.push({ id: 'n' + Date.now(), x: 100, y: 100, text: 'New note' });
+    render();
+  }
+  function openNoteModal(note) {
+    editingNote = note;
+    document.getElementById('note-modal-textarea').value = note.text;
+    document.getElementById('note-modal-backdrop').classList.add('show');
+  }
+  document.getElementById('note-modal-cancel').onclick = () => {
+    document.getElementById('note-modal-backdrop').classList.remove('show');
+  };
+  document.getElementById('note-modal-save').onclick = () => {
+    if (editingNote) editingNote.text = document.getElementById('note-modal-textarea').value;
+    document.getElementById('note-modal-backdrop').classList.remove('show');
+    render();
+  };
+  document.getElementById('note-modal-delete').onclick = () => {
+    if (editingNote) {
+      const idx = canvasNotes.findIndex(n => n.id === editingNote.id);
+      if (idx >= 0) canvasNotes.splice(idx, 1);
+    }
+    document.getElementById('note-modal-backdrop').classList.remove('show');
+    render();
+  };
+
+  // ==================== Box Creation & Deletion ====================
+  function createBoxFromSelection() {
+    if (selectedGroupIds.size === 0 && selectedBoxIds.size === 0) {
+      alert('Select groups or boxes first (use Box tool to click on them)');
+      return;
+    }
+    
+    const label = prompt('Box label:', 'Box ' + (boxes.length + 1));
+    if (!label) return;
+    
+    const scheme = prompt('Color scheme (1-6):', '1') || '1';
+    
+    // For parent boxes that wrap other boxes:
+    // - Only track direct group IDs (not groups from child boxes)
+    // - Track child box IDs separately
+    const directGroupIds = Array.from(selectedGroupIds);
+    const childBoxIds = Array.from(selectedBoxIds);
+    
+    boxes.push({
+      id: 'b' + nextBoxId++,
+      label: label,
+      scheme: scheme,
+      groupIds: directGroupIds,  // Only directly selected groups
+      childBoxIds: childBoxIds,   // Child boxes (their groups stay with them)
+      x: 0, y: 0, w: 0, h: 0,
+      fromCode: false
+    });
+    
+    selectedGroupIds.clear();
+    selectedBoxIds.clear();
+    currentTool = 'select';
+    render();
+  }
+  
+  function deleteSelected() {
+    // Delete selected boxes
+    selectedBoxIds.forEach(bid => {
+      const idx = boxes.findIndex(b => b.id === bid);
+      if (idx >= 0) boxes.splice(idx, 1);
+    });
+    selectedBoxIds.clear();
+    
+    // Delete selected groups
+    selectedGroupIds.forEach(gid => {
+      const idx = groups.findIndex(g => g.id === gid);
+      if (idx >= 0) groups.splice(idx, 1);
+      // Also remove from any boxes
+      boxes.forEach(box => {
+        const i = (box.groupIds || []).indexOf(gid);
+        if (i >= 0) box.groupIds.splice(i, 1);
+      });
+    });
+    selectedGroupIds.clear();
+    
+    render();
+  }
+
+  // ==================== JSON ====================
+  function exportJson() {
+    const state = { 
+      code: document.getElementById('code').value, 
+      groups: groups.map(g => ({ 
+        id: g.id, 
+        opType: g.opType, 
+        inputIds: g.inputIds, 
+        outputId: g.outputId, 
+        meta: g.meta,
+        x: g.x, 
+        y: g.y 
+      })),
+      boxes: boxes.map(b => ({ 
+        id: b.id, label: b.label, scheme: b.scheme, 
+        groupIds: b.groupIds, childBoxIds: b.childBoxIds,
+        x: b.x, y: b.y, w: b.w, h: b.h, 
+        fromCode: b.fromCode 
+      })),
+      notes: canvasNotes.map(n => ({ id: n.id, x: n.x, y: n.y, text: n.text }))
+    };
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'tinytorch-' + new Date().toISOString().slice(0,10) + '.json';
+    a.click();
+  }
+  
+  document.getElementById('jsonFileInput').onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const state = JSON.parse(ev.target.result);
+        
+        // Restore code
+        if (state.code) document.getElementById('code').value = state.code;
+        
+        // Restore groups
+        if (state.groups) {
+          groups.length = 0;
+          state.groups.forEach(g => groups.push(g));
+        }
+        
+        // Restore boxes
+        if (state.boxes) {
+          boxes.length = 0;
+          state.boxes.forEach(b => boxes.push(b));
+          nextBoxId = Math.max(...boxes.map(b => parseInt(b.id.replace('b', '')) || 0), 0) + 1;
+        }
+        
+        // Restore notes
+        if (state.notes) {
+          canvasNotes.length = 0;
+          state.notes.forEach(n => canvasNotes.push(n));
+        }
+        
+        // Set flag to preserve loaded positions
+        skipLayout = true;
+        
+        // Render without running code (data already loaded)
+        render();
+        
+      } catch(err) { 
+        console.error(err);
+        alert('Invalid JSON: ' + err.message); 
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // ==================== Splitters ====================
+  document.querySelectorAll('.v-resizer').forEach(handle => {
+    const leftEl = document.getElementById(handle.dataset.left);
+    if (!leftEl) return;
+    handle.onmousedown = e => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = leftEl.getBoundingClientRect().width;
+      function onMove(ev) { leftEl.style.flex = `0 0 ${Math.max(260, startW + ev.clientX - startX)}px`; }
+      function onUp() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); }
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
+  });
+
+  // ==================== Run Code ====================
+  function runCode() {
+    if (!wsConnected) { document.getElementById('error').textContent = 'Not connected'; return; }
+    ws.send(JSON.stringify({ action: 'run', code: document.getElementById('code').value }));
+  }
+  document.getElementById('run').onclick = runCode;
+  document.getElementById('code').onkeydown = e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode(); }
+  };
+
+  // ==================== Init ====================
+  // Restore retro mode preference
+  if (localStorage.getItem('retroMode') === '1') {
+    document.body.classList.add('retro-mode');
+  }
+  
+  document.getElementById('run').disabled = true;
+  connectWebSocket();
+</script>
+</body>
+</html>

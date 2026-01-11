@@ -152,12 +152,16 @@ class Tracer:
         for t in tensors:
             # If it's a Tensor-like object, use stable tid mapping.
             # If it's a scalar/const, create a const node id.
-            if hasattr(t, "data"):
+            # Skip layer objects (Sequential, Linear, etc.) - they're not tensors
+            if hasattr(t, "data") and hasattr(t, "shape"):
+                # This is a tensor-like object
                 t_ids.append(self._tid(t))
                 # Ensure tensor node exists/upserted (shape, data, etc.)
                 self.tensor(t)
-            else:
+            elif isinstance(t, (int, float, np.ndarray)):
+                # This is a scalar or numpy array - convert to const node
                 t_ids.append(self.tensor(t))
+            # else: skip non-tensor objects like layers
 
         payload: Dict[str, Any] = {
             "label": label,

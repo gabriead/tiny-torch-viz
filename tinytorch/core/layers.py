@@ -715,7 +715,9 @@ class Sequential:
     def forward(self, x):
         """Forward pass through all layers sequentially."""
         for layer in self.layers:
-            x = layer.forward(x)
+            # Call layer(x) instead of layer.forward(x) to ensure
+            # instrumentation hooks fire correctly
+            x = layer(x)
         return x
 
     def __call__(self, x):

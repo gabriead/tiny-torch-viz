@@ -202,6 +202,35 @@
       text-align: right;
       background: #0f1419;
       min-width: 50px;
+      transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    
+    /* Highlight styles for matmul hover */
+    .matrix-table td.highlight-row {
+      background: rgba(59, 130, 246, 0.3);
+      box-shadow: inset 0 0 0 1px #3b82f6;
+    }
+    .matrix-table td.highlight-col {
+      background: rgba(16, 185, 129, 0.3);
+      box-shadow: inset 0 0 0 1px #10b981;
+    }
+    .matrix-table td.highlight-cell {
+      background: rgba(251, 191, 36, 0.4);
+      box-shadow: inset 0 0 0 2px #fbbf24;
+    }
+    
+    /* Retro mode highlights */
+    body.retro-mode .matrix-table td.highlight-row {
+      background: rgba(0, 255, 255, 0.2);
+      box-shadow: inset 0 0 0 1px #00ffff, 0 0 8px rgba(0, 255, 255, 0.3);
+    }
+    body.retro-mode .matrix-table td.highlight-col {
+      background: rgba(255, 0, 255, 0.2);
+      box-shadow: inset 0 0 0 1px #ff00ff, 0 0 8px rgba(255, 0, 255, 0.3);
+    }
+    body.retro-mode .matrix-table td.highlight-cell {
+      background: rgba(255, 255, 0, 0.3);
+      box-shadow: inset 0 0 0 2px #ffff00, 0 0 12px rgba(255, 255, 0, 0.5);
     }
 
     .layout-grid { gap: 8px; }  /* display: inline-grid set above */
@@ -540,21 +569,21 @@ import numpy as np
 
 # === Create Sample Data ===
 # 4 samples, 8 input features
-X = Tensor(np.random.randn(4, 8))
+X = Tensor(np.random.randn(4, 4))
 # Target: class indices for 3 classes
 y_true = Tensor([0, 1, 2, 1])
 
 # === Build 3-Layer Neural Network ===
-# Layer 1: Input(8) -> Hidden(16)
-layer1 = Linear(8, 16)
+# Layer 1: Input(4) -> Hidden(4)
+layer1 = Linear(4, 4)
 relu1 = ReLU()
 
-# Layer 2: Hidden(16) -> Hidden(8) 
-layer2 = Linear(16, 8)
+# Layer 2: Hidden(4) -> Hidden(4)
+layer2 = Linear(4, 4)
 relu2 = ReLU()
 
-# Layer 3: Hidden(8) -> Output(3)
-layer3 = Linear(8, 3)
+# Layer 3: Hidden(4) -> Output(3)
+layer3 = Linear(4, 3)
 softmax = Softmax()
 
 # === Forward Pass ===
@@ -702,8 +731,8 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       case 'op':
         // Store tensor IDs, not resolved tensors - we'll resolve at render time
         // to get updated names from __auto_name__
-        groups.push({
-          id: 'g' + nextGroupId++,
+          groups.push({
+            id: 'g' + nextGroupId++,
           opType: msg.type,
           inputIds: msg.inputs,
           outputId: msg.output,
@@ -746,14 +775,29 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     const claimedGroupIds = new Set();
     
     // Map tensor IDs to group IDs (only unclaimed groups)
-    function getGroupIdsForTensors(tensorIds) {
+    // Also traces back to include ancestor operations that produced the inputs
+    function getGroupIdsForTensors(tensorIds, includeAncestors = true) {
       const gids = [];
-      tensorIds.forEach(tid => {
+      const visited = new Set();
+      
+      function addGroup(tid) {
+        if (visited.has(tid)) return;
+        visited.add(tid);
+        
         const g = groups.find(gr => gr.outputId === tid);
         if (g && !gids.includes(g.id) && !claimedGroupIds.has(g.id)) {
+          // If includeAncestors, first add groups that produced this group's inputs
+          // This ensures operations are added in execution order (ancestors first)
+          if (includeAncestors && g.inputIds) {
+            g.inputIds.forEach(inputId => addGroup(inputId));
+          }
+          
+          // Then add this group
           gids.push(g.id);
         }
-      });
+      }
+      
+      tensorIds.forEach(tid => addGroup(tid));
       return gids;
     }
     
@@ -903,14 +947,14 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     
     // Only process pending boxes if there are any
     if (pendingBoxes.length > 0) {
-      // Create root boxes
-      rootBoxes.forEach(rootPending => {
+    // Create root boxes
+    rootBoxes.forEach(rootPending => {
         const rootBox = createBoxHierarchy(rootPending, layoutCursorY, LEFT_MARGIN);
-        if (rootBox) {
+      if (rootBox) {
           layoutCursorY = rootBox.y + rootBox.h + 50;
-        }
-      });
-      
+      }
+    });
+    
       pendingBoxes.length = 0;
     }
     
@@ -1032,7 +1076,34 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       const output = tensors[g.outputId];
       const inputs = (g.inputIds || []).map(id => tensors[id]).filter(Boolean);
       const outputName = output?.name || g.opType;
-      const inputNames = inputs.map(t => t.name || t.id).join(', ');
+      
+      // For linear layers, only show the original input (not weight/bias)
+      // The instrumentation adds weight at index 0, so original input is at index 1
+      if (g.opType.toLowerCase() === 'linear' && inputs.length >= 2) {
+        const originalInput = inputs[1]; // Skip weight at index 0
+        const inputName = originalInput?.name || originalInput?.id || 'x';
+        return `${outputName} = Linear(${inputName})`;
+      }
+      
+      // Helper to get display name for an input tensor
+      function getInputDisplayName(tensor) {
+        if (tensor.name) return tensor.name;
+        // Look for a group that produced this tensor
+        const producerGroup = groups.find(gr => gr.outputId === tensor.id);
+        if (producerGroup) {
+          // If producer is linear, use "y" (what linear displays its output as)
+          if (producerGroup.opType.toLowerCase() === 'linear') {
+            const producerOutput = tensors[producerGroup.outputId];
+            return producerOutput?.name || 'y';
+          }
+          // For other producers, try their output tensor name
+          const producerOutput = tensors[producerGroup.outputId];
+          if (producerOutput?.name) return producerOutput.name;
+        }
+        return tensor.id;
+      }
+      
+      const inputNames = inputs.map(t => getInputDisplayName(t)).join(', ');
       return `${outputName} = ${g.opType}(${inputNames})`;
     }
     
@@ -1312,12 +1383,13 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     return { mat, shape };
   }
 
-  function createMatrixCard(label, tensor, orientation = 'auto') {
+  function createMatrixCard(label, tensor, orientation = 'auto', role = null) {
     const { mat, shape: displayShape } = tensorTo2D(tensor, orientation);
     // Use display shape (2D) for consistent formatting - always shows rows×cols
     const shapeStr = displayShape.join('×');
     const card = document.createElement('div');
     card.className = 'matrix-card';
+    if (role) card.dataset.role = role;
     card.innerHTML = `<div class="matrix-title"><span>${label}</span><span class="matrix-shape">${shapeStr}</span></div>`;
     if (showMatrixData && mat.length > 0 && mat[0].length > 0) {
       const table = document.createElement('table');
@@ -1329,9 +1401,12 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       
       for (let r = 0; r < showR; r++) {
         const tr = document.createElement('tr');
+        tr.dataset.row = r;
         for (let c = 0; c < showC; c++) {
           const td = document.createElement('td');
           td.textContent = mat[r][c];
+          td.dataset.row = r;
+          td.dataset.col = c;
           tr.appendChild(td);
         }
         // Add column ellipsis if truncated
@@ -1357,6 +1432,92 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       card.appendChild(table);
     }
     return card;
+  }
+
+  // ==================== Element-wise Hover Highlighting ====================
+  // For operations where output[i,j] corresponds to input[i,j] (ReLU, activations, etc.)
+  function setupElementwiseHover(inputCards, outputCard) {
+    const outputTable = outputCard.querySelector('.matrix-table');
+    if (!outputTable) return;
+    
+    const inputTables = inputCards.map(card => card.querySelector('.matrix-table')).filter(Boolean);
+    if (inputTables.length === 0) return;
+    
+    const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
+    
+    outputCells.forEach(cell => {
+      cell.style.cursor = 'pointer';
+      
+      cell.addEventListener('mouseenter', () => {
+        const row = cell.dataset.row;
+        const col = cell.dataset.col;
+        
+        // Highlight the output cell
+        cell.classList.add('highlight-cell');
+        
+        // Highlight corresponding cells in all input matrices
+        inputTables.forEach(inputTable => {
+          const inputCell = inputTable.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+          if (inputCell) {
+            inputCell.classList.add('highlight-cell');
+          }
+        });
+      });
+      
+      cell.addEventListener('mouseleave', () => {
+        // Remove all highlights
+        cell.classList.remove('highlight-cell');
+        inputTables.forEach(inputTable => {
+          inputTable.querySelectorAll('.highlight-cell').forEach(td => {
+            td.classList.remove('highlight-cell');
+          });
+        });
+      });
+    });
+  }
+
+  // ==================== Matmul Hover Highlighting ====================
+  function setupMatmulHover(wrapper, leftCard, topCard, resultCard) {
+    const resultTable = resultCard.querySelector('.matrix-table');
+    const leftTable = leftCard.querySelector('.matrix-table');
+    const topTable = topCard.querySelector('.matrix-table');
+    
+    if (!resultTable || !leftTable || !topTable) return;
+    
+    const resultCells = resultTable.querySelectorAll('td[data-row][data-col]');
+    
+    resultCells.forEach(cell => {
+      cell.style.cursor = 'pointer';
+      
+      cell.addEventListener('mouseenter', () => {
+        const row = cell.dataset.row;
+        const col = cell.dataset.col;
+        
+        // Highlight the result cell
+        cell.classList.add('highlight-cell');
+        
+        // Highlight the corresponding row in the left matrix (W)
+        leftTable.querySelectorAll(`td[data-row="${row}"]`).forEach(td => {
+          td.classList.add('highlight-row');
+        });
+        
+        // Highlight the corresponding column in the top matrix (X.T)
+        topTable.querySelectorAll(`td[data-col="${col}"]`).forEach(td => {
+          td.classList.add('highlight-col');
+        });
+      });
+      
+      cell.addEventListener('mouseleave', () => {
+        // Remove all highlights
+        cell.classList.remove('highlight-cell');
+        leftTable.querySelectorAll('.highlight-row').forEach(td => {
+          td.classList.remove('highlight-row');
+        });
+        topTable.querySelectorAll('.highlight-col').forEach(td => {
+          td.classList.remove('highlight-col');
+        });
+      });
+    });
   }
 
   // ==================== Render Operation ====================
@@ -1393,7 +1554,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       wrapper.className = 'layout-elementwise';
       
       // First operand (top-left)
-      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]);
+      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0], 'auto', 'input');
       left.classList.add('elem-left');
       wrapper.appendChild(left);
       
@@ -1404,14 +1565,17 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       wrapper.appendChild(opSym);
       
       // Second operand (top-right)
-      const right = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1]);
+      const right = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1], 'auto', 'input');
       right.classList.add('elem-right');
       wrapper.appendChild(right);
       
       // Result (bottom-left, below first operand)
-      const result = createMatrixCard(output.name || type, output, outputOrientation);
+      const result = createMatrixCard(output.name || type, output, outputOrientation, 'output');
       result.classList.add('elem-result');
       wrapper.appendChild(result);
+      
+      // Add element-wise hover highlighting
+      setupElementwiseHover([left, right], result);
       
       container.appendChild(wrapper);
       return;
@@ -1423,7 +1587,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       wrapper.className = 'layout-elementwise';
       
       // Predictions (top-left)
-      const preds = createMatrixCard(inputs[0].name || 'predictions', inputs[0]);
+      const preds = createMatrixCard(inputs[0].name || 'predictions', inputs[0], 'auto', 'input');
       preds.classList.add('elem-left');
       wrapper.appendChild(preds);
       
@@ -1435,14 +1599,17 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       wrapper.appendChild(arrow);
       
       // Targets (top-right)
-      const targs = createMatrixCard(inputs[1].name || 'targets', inputs[1]);
+      const targs = createMatrixCard(inputs[1].name || 'targets', inputs[1], 'auto', 'input');
       targs.classList.add('elem-right');
       wrapper.appendChild(targs);
       
       // Loss value (bottom-left)
-      const lossCard = createMatrixCard(output.name || 'loss', output);
+      const lossCard = createMatrixCard(output.name || 'loss', output, 'auto', 'output');
       lossCard.classList.add('elem-result');
       wrapper.appendChild(lossCard);
+      
+      // Add element-wise hover highlighting
+      setupElementwiseHover([preds, targs], lossCard);
       
       container.appendChild(wrapper);
       return;
@@ -1461,15 +1628,27 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
         ...x,
         name: (x.name || 'X') + '.T',
         shape: x.shape ? [...x.shape].reverse() : x.shape,
-        data: x.data  // We'll transpose the display in createMatrixCard
+        data: x.data
       };
       // Transpose the actual data for display
       if (x.data && Array.isArray(x.data) && x.data.length > 0) {
-        const rows = x.data.length;
-        const cols = x.data[0]?.length || 1;
         if (Array.isArray(x.data[0])) {
-          // Transpose 2D array
           xT.data = x.data[0].map((_, colIdx) => x.data.map(row => row[colIdx]));
+        }
+      }
+      
+      // Create transposed version of output for visualization
+      // The actual output is (4,16) but visually we show W @ X.T = (16,4)
+      const outputT = {
+        ...output,
+        name: output.name || 'y',
+        shape: output.shape ? [...output.shape].reverse() : output.shape,
+        data: output.data
+      };
+      // Transpose the output data for display
+      if (output.data && Array.isArray(output.data) && output.data.length > 0) {
+        if (Array.isArray(output.data[0])) {
+          outputT.data = output.data[0].map((_, colIdx) => output.data.map(row => row[colIdx]));
         }
       }
       
@@ -1481,20 +1660,23 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       emptyCell.className = 'linear-empty';
       wrapper.appendChild(emptyCell);
       
-      // Input X.T (top-right position) - transposed for W @ X.T layout
-      const inputCard = createMatrixCard(xT.name, xT);
-      inputCard.classList.add('linear-input');  // Top position
+      // Input X.T (top-right position) - with role for hover highlighting
+      const inputCard = createMatrixCard(xT.name, xT, 'auto', 'top');
+      inputCard.classList.add('linear-input');
       wrapper.appendChild(inputCard);
       
-      // Weight matrix W (left position) - always label as "W"
-      const weightCard = createMatrixCard('W', weight);
-      weightCard.classList.add('linear-weight');  // Left position
+      // Weight matrix W (left position)
+      const weightCard = createMatrixCard('W', weight, 'auto', 'left');
+      weightCard.classList.add('linear-weight');
       wrapper.appendChild(weightCard);
       
-      // Output (bottom-right, result is (W @ x.T).T = z)
-      const outputCard = createMatrixCard(output.name || 'y', output);
+      // Output (bottom-right) - show transposed to match W @ X.T dimensions
+      const outputCard = createMatrixCard(outputT.name, outputT, 'auto', 'result');
       outputCard.classList.add('linear-output');
       wrapper.appendChild(outputCard);
+      
+      // Add hover highlighting for matmul visualization
+      setupMatmulHover(wrapper, weightCard, inputCard, outputCard);
       
       container.appendChild(wrapper);
       return;
@@ -1504,31 +1686,63 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       // Matrix multiplication: keep grid layout for proper alignment
       const grid = document.createElement('div');
       grid.className = 'layout-grid layout-binary';
-      
-      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]);
+    
+      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0], 'auto', 'left');
       left.classList.add('pos-left');
       grid.appendChild(left);
       
-      const top = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1]);
+      const top = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1], 'auto', 'top');
       top.classList.add('pos-top');
       grid.appendChild(top);
       
-      const res = createMatrixCard(output.name || type, output, outputOrientation);
+      const res = createMatrixCard(output.name || type, output, outputOrientation, 'result');
       res.classList.add('pos-result');
       grid.appendChild(res);
+      
+      // Add hover highlighting for matmul visualization
+      setupMatmulHover(grid, left, top, res);
       
       container.appendChild(grid);
       return;
     }
     
-    // Unary operations (sum, mean, max, transpose, etc.)
+    // Unary operations (sum, mean, max, transpose, relu, sigmoid, etc.)
     const grid = document.createElement('div');
     grid.className = 'layout-grid layout-unary';
     
-    if (inputs[0]) {
-      grid.appendChild(createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]));
+    // Helper to get display name for a tensor, falling back to producer's output name
+    function getInputDisplayName(tensor) {
+      if (tensor.name) return tensor.name;
+      // Look for a group that produced this tensor
+      const producerGroup = groups.find(g => g.outputId === tensor.id);
+      if (producerGroup) {
+        // If producer is linear, use "y" (what linear displays its output as)
+        if (producerGroup.opType.toLowerCase() === 'linear') {
+          const producerOutput = tensors[producerGroup.outputId];
+          return producerOutput?.name || 'y';
+        }
+        // For other producers, try their output tensor name
+        const producerOutput = tensors[producerGroup.outputId];
+        if (producerOutput?.name) return producerOutput.name;
+      }
+      return tensor.id;
     }
-    grid.appendChild(createMatrixCard(output.name || type, output, outputOrientation));
+    
+    const inputCards = [];
+    if (inputs[0]) {
+      const inputLabel = getInputDisplayName(inputs[0]);
+      const inputCard = createMatrixCard(inputLabel, inputs[0], 'auto', 'input');
+      grid.appendChild(inputCard);
+      inputCards.push(inputCard);
+    }
+    const outputCard = createMatrixCard(output.name || type, output, outputOrientation, 'output');
+    grid.appendChild(outputCard);
+    
+    // Add element-wise hover highlighting for activations and element-wise ops
+    const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax'].includes(type);
+    if (isElementwiseUnary && inputCards.length > 0) {
+      setupElementwiseHover(inputCards, outputCard);
+    }
     
     container.appendChild(grid);
   }

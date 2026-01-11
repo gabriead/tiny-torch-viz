@@ -20,7 +20,7 @@ features:
   - title: Interactive Grids
     details: Don't just print tensors. Watch row-column multiplications happen step-by-step.
   - title: Education First
-    details: Built for students to bridge the gap between "Math" and "Code".
+    details: Built for learners to bridge the gap between "Math" and "Code".
 ---
 
 <script setup>
@@ -29,7 +29,7 @@ import { VPTeamMembers } from 'vitepress/theme'
 const members = [
   {
     avatar: 'https://github.com/gabriead.png',
-    name: 'Gabriel Ad',
+    name: 'Gabriel Adrian',
     title: 'Creator',
     links: [
       { icon: 'github', link: 'https://github.com/gabriead' }

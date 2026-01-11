@@ -1,14 +1,18 @@
-# TinyTorch 🔥
+# TinyTorch Viz 🔥
 
-A lightweight, educational deep learning framework built from scratch. TinyTorch provides PyTorch-like APIs for building and visualizing neural networks, making it perfect for learning ML fundamentals.
+A lightweight, educational framework built to visualize your deep learning architectures and foster a deep mathematical intuition.
+Based on TinyTorch [TinyTorch](https://mlsysbook.ai/tinytorch/intro.html) and the educational concepts of [AI by Hand](https://www.byhand.ai/). 
+making it perfect for learning ML fundamentals ahead of the curve.
+
+## What can you do with it?
+You can use the code editor to code deep learning architectures and directly see the visualiuzation in order develop a deep mathematical intuition.
 
 ## Features
 
-- **Interactive Visualization**: Real-time tensor flow visualization in browser
+- **Interactive Visualization**: Build and visualize your deep learning architecture in the browser
 - **Educational Design**: Clear, readable code focused on understanding
 - **Complete ML Stack**: Tensors, layers, activations, losses, optimizers, and more
 - **NumPy Backend**: Pure Python/NumPy implementation
-
 ---
 
 ## Quick Start
@@ -38,9 +42,6 @@ a = Tensor([1, 2, 3, 4])
 b = Tensor(np.random.randn(3, 4))
 c = Tensor([[1, 2], [3, 4]])
 
-# Access properties
-print(a.shape)  # (4,)
-print(b.data)   # underlying numpy array
 ```
 
 #### Arithmetic Operations
@@ -164,10 +165,6 @@ linear = Linear(8, 4)
 x = Tensor(np.random.randn(32, 8))  # Batch of 32 samples
 y = linear(x)                        # Output shape: (32, 4)
 
-# Access parameters
-print(linear.weight.shape)  # (8, 4)
-print(linear.bias.shape)    # (4,)
-print(linear.parameters())  # List of [weight, bias]
 ```
 
 #### Dropout

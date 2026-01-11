@@ -146,57 +146,68 @@ class Instrumentor:
         setattr(Layer, "__call__", wrapped)
 
     def _wrap_activation(self, activation_cls):
-        """Wraps an activation class's __call__ or forward method."""
+        """Wraps an activation class's __call__ and forward methods."""
         cls_name = activation_cls.__name__
         instrumentor = self  # Capture reference for closure
         
-        # Check if it has __call__ method
+        def make_wrapped(orig, name):
+            def wrapped(instance, x, *args, **kwargs):
+                # Set flag to suppress internal tensor op tracing
+                was_inside = instrumentor._inside_layer
+                instrumentor._inside_layer = True
+                try:
+                    result = orig(instance, x, *args, **kwargs)
+                finally:
+                    instrumentor._inside_layer = was_inside
+                
+                meta = {'activation_type': name}
+                instrumentor.tracer.op(name.lower(), [x], result, meta)
+                return result
+            return wrapped
+        
+        # Wrap __call__
         if hasattr(activation_cls, '__call__'):
-            original = activation_cls.__call__
-            self.original_methods[f"{cls_name}.__call__"] = original
-            
-            def make_wrapped(orig, name):
-                def wrapped(instance, x, *args, **kwargs):
-                    # Set flag to suppress internal tensor op tracing
-                    was_inside = instrumentor._inside_layer
-                    instrumentor._inside_layer = True
-                    try:
-                        result = orig(instance, x, *args, **kwargs)
-                    finally:
-                        instrumentor._inside_layer = was_inside
-                    
-                    meta = {'activation_type': name}
-                    instrumentor.tracer.op(name.lower(), [x], result, meta)
-                    return result
-                return wrapped
-            
-            setattr(activation_cls, "__call__", make_wrapped(original, cls_name))
+            original_call = activation_cls.__call__
+            self.original_methods[f"{cls_name}.__call__"] = original_call
+            setattr(activation_cls, "__call__", make_wrapped(original_call, cls_name))
+        
+        # Wrap forward (so .forward() also gets traced)
+        if hasattr(activation_cls, 'forward'):
+            original_forward = activation_cls.forward
+            self.original_methods[f"{cls_name}.forward"] = original_forward
+            setattr(activation_cls, "forward", make_wrapped(original_forward, cls_name))
 
     def _wrap_loss(self, loss_cls):
-        """Wraps a loss class's __call__ method."""
+        """Wraps a loss class's __call__ and forward methods."""
         cls_name = loss_cls.__name__
         instrumentor = self  # Capture reference for closure
         
+        def make_wrapped(orig, name):
+            def wrapped(instance, predictions, targets, *args, **kwargs):
+                # Set flag to suppress internal tensor op tracing
+                was_inside = instrumentor._inside_layer
+                instrumentor._inside_layer = True
+                try:
+                    result = orig(instance, predictions, targets, *args, **kwargs)
+                finally:
+                    instrumentor._inside_layer = was_inside
+                
+                meta = {'loss_type': name}
+                instrumentor.tracer.op(name.lower(), [predictions, targets], result, meta)
+                return result
+            return wrapped
+        
+        # Wrap __call__
         if hasattr(loss_cls, '__call__'):
-            original = loss_cls.__call__
-            self.original_methods[f"{cls_name}.__call__"] = original
-            
-            def make_wrapped(orig, name):
-                def wrapped(instance, predictions, targets, *args, **kwargs):
-                    # Set flag to suppress internal tensor op tracing
-                    was_inside = instrumentor._inside_layer
-                    instrumentor._inside_layer = True
-                    try:
-                        result = orig(instance, predictions, targets, *args, **kwargs)
-                    finally:
-                        instrumentor._inside_layer = was_inside
-                    
-                    meta = {'loss_type': name}
-                    instrumentor.tracer.op(name.lower(), [predictions, targets], result, meta)
-                    return result
-                return wrapped
-            
-            setattr(loss_cls, "__call__", make_wrapped(original, cls_name))
+            original_call = loss_cls.__call__
+            self.original_methods[f"{cls_name}.__call__"] = original_call
+            setattr(loss_cls, "__call__", make_wrapped(original_call, cls_name))
+        
+        # Wrap forward (so .forward() also gets traced)
+        if hasattr(loss_cls, 'forward'):
+            original_forward = loss_cls.forward
+            self.original_methods[f"{cls_name}.forward"] = original_forward
+            setattr(loss_cls, "forward", make_wrapped(original_forward, cls_name))
 
     def instrument(self):
         """Apply all hooks."""

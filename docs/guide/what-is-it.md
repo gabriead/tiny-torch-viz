@@ -20,7 +20,7 @@ a = Tensor([1, 2, 3, 4])
 b = Tensor(np.random.randn(3, 4))
 
 print(a.shape)
-Pythonimport numpy as np
+Python import numpy as np
 # Standard NumPy arrays
 a = np.array([1, 2, 3, 4])
 b = np.random.randn(3, 4)

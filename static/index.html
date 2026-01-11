@@ -214,6 +214,26 @@
     .pos-left { grid-row: 1 / 3; grid-column: 1; align-self: center; }
     .pos-top { grid-row: 1; grid-column: 2; }
     .pos-result { grid-row: 2; grid-column: 2; }
+    
+    /* Element-wise operation layout: inputs side by side, result below left */
+    .layout-elementwise {
+      display: inline-grid;
+      grid-template-columns: auto auto auto;
+      grid-template-rows: auto auto;
+      gap: 10px;
+      align-items: center;
+    }
+    .elem-left { grid-row: 1; grid-column: 1; }
+    .elem-op { grid-row: 1; grid-column: 2; align-self: center; justify-self: center; }
+    .elem-right { grid-row: 1; grid-column: 3; }
+    .elem-result { grid-row: 2; grid-column: 1; }
+    .op-symbol-large {
+      font-size: 28px;
+      font-weight: 300;
+      color: #64748b;
+      padding: 0 8px;
+      user-select: none;
+    }
 
     /* TOOLBAR */
     #toolbar {
@@ -453,7 +473,8 @@
     }
 
     /* Op symbols */
-    body.retro-mode .op-symbol {
+    body.retro-mode .op-symbol,
+    body.retro-mode .op-symbol-large {
       color: var(--retro-neon-blue);
       text-shadow: 0 0 6px rgba(0, 243, 255, 0.6);
     }
@@ -1328,33 +1349,96 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
   // ==================== Render Operation ====================
   function renderOp(container, op) {
     const { type, inputs, output, meta } = op;
-    const isBinary = ['matmul', 'add', 'sub', 'mul', 'div'].includes(type) && inputs.length >= 2;
+    const isElementwise = ['add', 'sub', 'mul', 'div'].includes(type) && inputs.length >= 2;
+    const isMatmul = type === 'matmul' && inputs.length >= 2;
+    const isLoss = ['mseloss', 'crossentropyloss', 'bceloss'].includes(type) && inputs.length >= 2;
     
     // Determine output orientation for reduction operations
     let outputOrientation = 'auto';
     if (['sum', 'mean', 'max'].includes(type) && inputs[0] && output.shape && output.shape.length === 1) {
       const inputShape = inputs[0].shape || [];
-      const axis = meta?.axis ?? meta?.arg0;  // axis could be in 'axis' or 'arg0'
+      const axis = meta?.axis ?? meta?.arg0;
       
       if (inputShape.length >= 2) {
-        // Normalize axis (handle negative indices)
         let normalizedAxis = axis;
         if (normalizedAxis < 0) normalizedAxis = inputShape.length + normalizedAxis;
-        
-        // axis=0 reduces rows → result corresponds to columns → display as row
-        // axis=1 or axis=-1 (last) reduces columns → result corresponds to rows → display as col
         if (normalizedAxis === 0) {
-          outputOrientation = 'row';  // Column-wise reduction → horizontal result
+          outputOrientation = 'row';
         } else {
-          outputOrientation = 'col';  // Row-wise reduction → vertical result
+          outputOrientation = 'col';
         }
       }
     }
     
-    const grid = document.createElement('div');
-    grid.className = 'layout-grid ' + (isBinary ? 'layout-binary' : 'layout-unary');
+    // Get operator symbol for element-wise operations
+    const opSymbols = { add: '+', sub: '−', mul: '×', div: '÷' };
     
-    if (isBinary) {
+    if (isElementwise) {
+      // Element-wise: inputs side by side, result below left input
+      const wrapper = document.createElement('div');
+      wrapper.className = 'layout-elementwise';
+      
+      // First operand (top-left)
+      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]);
+      left.classList.add('elem-left');
+      wrapper.appendChild(left);
+      
+      // Operator symbol (top-center)
+      const opSym = document.createElement('span');
+      opSym.className = 'op-symbol-large elem-op';
+      opSym.textContent = opSymbols[type] || '+';
+      wrapper.appendChild(opSym);
+      
+      // Second operand (top-right)
+      const right = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1]);
+      right.classList.add('elem-right');
+      wrapper.appendChild(right);
+      
+      // Result (bottom-left, below first operand)
+      const result = createMatrixCard(output.name || type, output, outputOrientation);
+      result.classList.add('elem-result');
+      wrapper.appendChild(result);
+      
+      container.appendChild(wrapper);
+      return;
+    }
+    
+    if (isLoss) {
+      // Loss functions: predictions | targets, loss below
+      const wrapper = document.createElement('div');
+      wrapper.className = 'layout-elementwise';
+      
+      // Predictions (top-left)
+      const preds = createMatrixCard(inputs[0].name || 'predictions', inputs[0]);
+      preds.classList.add('elem-left');
+      wrapper.appendChild(preds);
+      
+      // Arrow or separator (optional visual)
+      const arrow = document.createElement('span');
+      arrow.className = 'op-symbol-large elem-op';
+      arrow.textContent = '→';
+      arrow.title = 'compared to';
+      wrapper.appendChild(arrow);
+      
+      // Targets (top-right)
+      const targs = createMatrixCard(inputs[1].name || 'targets', inputs[1]);
+      targs.classList.add('elem-right');
+      wrapper.appendChild(targs);
+      
+      // Loss value (bottom-left)
+      const lossCard = createMatrixCard(output.name || 'loss', output);
+      lossCard.classList.add('elem-result');
+      wrapper.appendChild(lossCard);
+      
+      container.appendChild(wrapper);
+      return;
+    }
+    
+    if (isMatmul) {
+      // Matrix multiplication: keep grid layout for proper alignment
+      const grid = document.createElement('div');
+      grid.className = 'layout-grid layout-binary';
+      
       const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]);
       left.classList.add('pos-left');
       grid.appendChild(left);
@@ -1366,12 +1450,19 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       const res = createMatrixCard(output.name || type, output, outputOrientation);
       res.classList.add('pos-result');
       grid.appendChild(res);
-    } else {
-      if (inputs[0]) {
-        grid.appendChild(createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]));
-      }
-      grid.appendChild(createMatrixCard(output.name || type, output, outputOrientation));
+      
+      container.appendChild(grid);
+      return;
     }
+    
+    // Unary operations (sum, mean, max, transpose, etc.)
+    const grid = document.createElement('div');
+    grid.className = 'layout-grid layout-unary';
+    
+    if (inputs[0]) {
+      grid.appendChild(createMatrixCard(inputs[0].name || inputs[0].id, inputs[0]));
+    }
+    grid.appendChild(createMatrixCard(output.name || type, output, outputOrientation));
     
     container.appendChild(grid);
   }

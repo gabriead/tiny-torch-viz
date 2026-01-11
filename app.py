@@ -19,12 +19,11 @@ from instrumentation import Instrumentor
 import numpy as np
 from tinytorch.core.tensor import Tensor
 from tinytorch.core.layers import Linear, Dropout, Layer, Sequential
-from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax
+from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax, LogSoftmax
 from tinytorch.core.losses import MSELoss, CrossEntropyLoss, log_softmax
 
 # Import additional modules
 from tinytorch.core.autograd import Function, enable_autograd
-from tinytorch.core.dataloader import Dataset, TensorDataset, DataLoader, RandomHorizontalFlip, RandomCrop, Compose
 from tinytorch.core.optimizers import Optimizer, SGD, Adam, AdamW
 from tinytorch.core.tokenization import Tokenizer, CharTokenizer, BPETokenizer, create_tokenizer, tokenize_dataset
 from tinytorch.core.training import CosineSchedule, clip_grad_norm, Trainer
@@ -169,6 +168,7 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
         "Tanh": Tanh,
         "GELU": GELU,
         "Softmax": Softmax,
+        "LogSoftmax": LogSoftmax,
         # Losses
         "MSELoss": MSELoss,
         "CrossEntropyLoss": CrossEntropyLoss,
@@ -176,13 +176,6 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
         # Autograd
         "Function": Function,
         "enable_autograd": enable_autograd,
-        # DataLoader
-        "Dataset": Dataset,
-        "TensorDataset": TensorDataset,
-        "DataLoader": DataLoader,
-        "RandomHorizontalFlip": RandomHorizontalFlip,
-        "RandomCrop": RandomCrop,
-        "Compose": Compose,
         # Optimizers
         "Optimizer": Optimizer,
         "SGD": SGD,

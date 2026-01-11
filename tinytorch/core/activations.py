@@ -781,6 +781,46 @@ class Softmax:
         """Allows the activation to be called like a function."""
         return self.forward(x, dim)
 
+
+class LogSoftmax:
+    """
+    Log-Softmax activation: log(softmax(x))
+    
+    Computes log-softmax with numerical stability using the log-sum-exp trick.
+    More numerically stable than computing softmax then log separately.
+    Essential for cross-entropy loss computation.
+    """
+
+    def parameters(self):
+        """Return empty list (activations have no learnable parameters)."""
+        return []
+
+    def forward(self, x: Tensor, dim: int = -1) -> Tensor:
+        """
+        Apply log-softmax activation along specified dimension.
+        
+        Uses the log-sum-exp trick for numerical stability:
+        log_softmax(x) = x - max(x) - log(sum(exp(x - max(x))))
+        """
+        # Step 1: Find max along dimension for numerical stability
+        max_vals = np.max(x.data, axis=dim, keepdims=True)
+
+        # Step 2: Subtract max to prevent overflow
+        shifted = x.data - max_vals
+
+        # Step 3: Compute log(sum(exp(shifted)))
+        log_sum_exp = np.log(np.sum(np.exp(shifted), axis=dim, keepdims=True))
+
+        # Step 4: Return log_softmax = input - max - log_sum_exp
+        result = x.data - max_vals - log_sum_exp
+
+        return Tensor(result)
+
+    def __call__(self, x: Tensor, dim: int = -1) -> Tensor:
+        """Allows the activation to be called like a function."""
+        return self.forward(x, dim)
+
+
 # %% [markdown]
 """
 ### 🔬 Unit Test: Softmax

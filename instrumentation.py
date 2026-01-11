@@ -123,9 +123,21 @@ class Instrumentor:
             # Get the layer name
             layer_name = instance.__class__.__name__
 
-            # Emit op event for the layer
+            # Build inputs list - for Linear, include weight and bias
+            inputs = [x]
             meta = {'layer_type': layer_name}
-            instrumentor.tracer.op(layer_name.lower(), [x], result, meta)
+            
+            # For Linear layers, include weight and bias for visualization
+            if layer_name == 'Linear':
+                if hasattr(instance, 'weight'):
+                    inputs.append(instance.weight)
+                    meta['has_weight'] = True
+                if hasattr(instance, 'bias') and instance.bias is not None:
+                    inputs.append(instance.bias)
+                    meta['has_bias'] = True
+
+            # Emit op event for the layer
+            instrumentor.tracer.op(layer_name.lower(), inputs, result, meta)
 
             return result
 

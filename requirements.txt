@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+numpy
+# Add any other libraries you import in your python code

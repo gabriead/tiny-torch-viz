@@ -20,7 +20,7 @@ import numpy as np
 from tinytorch.core.tensor import Tensor
 from tinytorch.core.layers import Linear, Dropout, Layer, Sequential
 from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax
-from tinytorch.core.losses import MSELoss, CrossEntropyLoss
+from tinytorch.core.losses import MSELoss, CrossEntropyLoss, log_softmax
 
 # Import additional modules
 from tinytorch.core.autograd import Function, enable_autograd
@@ -172,6 +172,7 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
         # Losses
         "MSELoss": MSELoss,
         "CrossEntropyLoss": CrossEntropyLoss,
+        "log_softmax": log_softmax,
         # Autograd
         "Function": Function,
         "enable_autograd": enable_autograd,

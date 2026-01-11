@@ -7,6 +7,9 @@ making it perfect for learning ML fundamentals ahead of the curve.
 ## What can you do with it?
 You can use the code editor to code deep learning architectures and directly see the visualiuzation in order develop a deep mathematical intuition.
 
+## Important t know
+I changed the order of the matrix multplication from x*w to w*x folowing AibyHand teaching methodoloy
+
 ## Features
 
 - **Interactive Visualization**: Build and visualize your deep learning architecture in the browser

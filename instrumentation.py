@@ -130,7 +130,9 @@ class Instrumentor:
             # For Linear layers, include weight and bias for visualization
             if layer_name == 'Linear':
                 if hasattr(instance, 'weight'):
-                    inputs.append(instance.weight)
+                    #inputs.append(instance.weight)
+                    inputs.insert(0, instance.weight)
+
                     meta['has_weight'] = True
                 if hasattr(instance, 'bias') and instance.bias is not None:
                     inputs.append(instance.bias)

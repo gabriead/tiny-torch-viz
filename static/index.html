@@ -1449,11 +1449,29 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     }
     
     if (isLinear) {
-      // Linear layer: show as matmul with bias trick
-      // inputs[0] = x, inputs[1] = weight, inputs[2] = bias (optional)
-      const x = inputs[0];
-      const weight = inputs[1];
+      // Linear layer: show as matmul layout for W @ X.T
+      // Instrumentation inserts weight at front: inputs[0] = weight, inputs[1] = x
+      const weight = inputs[0];
+      const x = inputs[1];
       const bias = inputs.length > 2 ? inputs[2] : null;
+      
+      // Create transposed version of x for visualization
+      // The computation is (W @ x.T).T, so we show x.T on top
+      const xT = {
+        ...x,
+        name: (x.name || 'X') + '.T',
+        shape: x.shape ? [...x.shape].reverse() : x.shape,
+        data: x.data  // We'll transpose the display in createMatrixCard
+      };
+      // Transpose the actual data for display
+      if (x.data && Array.isArray(x.data) && x.data.length > 0) {
+        const rows = x.data.length;
+        const cols = x.data[0]?.length || 1;
+        if (Array.isArray(x.data[0])) {
+          // Transpose 2D array
+          xT.data = x.data[0].map((_, colIdx) => x.data.map(row => row[colIdx]));
+        }
+      }
       
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-linear';
@@ -1463,18 +1481,17 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       emptyCell.className = 'linear-empty';
       wrapper.appendChild(emptyCell);
       
-      // Input X (top-right position, like matmul)
-      const inputCard = createMatrixCard(x.name || 'x', x);
-      inputCard.classList.add('linear-input');
+      // Input X.T (top-right position) - transposed for W @ X.T layout
+      const inputCard = createMatrixCard(xT.name, xT);
+      inputCard.classList.add('linear-input');  // Top position
       wrapper.appendChild(inputCard);
       
-      // Weight matrix (left position)
-      let weightLabel = weight.name || 'W';
-      const weightCard = createMatrixCard(weightLabel, weight);
-      weightCard.classList.add('linear-weight');
+      // Weight matrix W (left position) - always label as "W"
+      const weightCard = createMatrixCard('W', weight);
+      weightCard.classList.add('linear-weight');  // Left position
       wrapper.appendChild(weightCard);
       
-      // Output (bottom-right, result of x @ W + b)
+      // Output (bottom-right, result is (W @ x.T).T = z)
       const outputCard = createMatrixCard(output.name || 'y', output);
       outputCard.classList.add('linear-output');
       wrapper.appendChild(outputCard);

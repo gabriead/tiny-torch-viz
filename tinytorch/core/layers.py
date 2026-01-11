@@ -280,14 +280,14 @@ class Linear(Layer):
         TODO: Initialize weights and bias with Xavier initialization
 
         APPROACH:
-        1. Create weight matrix (in_features, out_features) with Xavier scaling
+        1. Create weight matrix (out_features, in_features) with Xavier scaling
         2. Create bias vector (out_features,) initialized to zeros if bias=True
         3. Store as Tensor objects for use in forward pass
 
         EXAMPLE:
         >>> layer = Linear(784, 10)  # MNIST classifier final layer
         >>> print(layer.weight.shape)
-        (784, 10)
+        (10, 784)
         >>> print(layer.bias.shape)
         (10,)
 
@@ -301,8 +301,9 @@ class Linear(Layer):
         self.out_features = out_features
 
         # Xavier/Glorot initialization for stable gradients
+        # Weight shape: (out_features, in_features) for W @ X computation
         scale = np.sqrt(XAVIER_SCALE_FACTOR / in_features)
-        weight_data = np.random.randn(in_features, out_features) * scale
+        weight_data = np.random.randn(out_features, in_features) * scale
         self.weight = Tensor(weight_data)#, requires_grad=True)
 
         # Initialize bias to zeros or None
@@ -317,10 +318,10 @@ class Linear(Layer):
         """
         Forward pass through linear layer.
 
-        TODO: Implement y = xW + b
+        TODO: Implement y = Wx + b (conceptually W @ x for each sample)
 
         APPROACH:
-        1. Matrix multiply input with weights: xW
+        1. Matrix multiply: y = x @ W.T (equivalent to (W @ x.T).T for batched data)
         2. Add bias if it exists
         3. Return result as new Tensor
 
@@ -337,8 +338,9 @@ class Linear(Layer):
         - Broadcasting automatically handles bias addition
         """
         ### BEGIN SOLUTION
-        # Linear transformation: y = xW
-        output = x.matmul(self.weight)
+        # Linear transformation: y = (W @ x.T).T = x @ W.T
+        # Weight is (out_features, in_features), so we transpose for matmul
+        output = x.matmul(self.weight.transpose())
 
         # Add bias if present
         if self.bias is not None:

@@ -1,4 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 numpy
+websockets
 # Add any other libraries you import in your python code

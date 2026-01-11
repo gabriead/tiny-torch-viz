@@ -1739,7 +1739,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     grid.appendChild(outputCard);
     
     // Add element-wise hover highlighting for activations and element-wise ops
-    const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax'].includes(type);
+    const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax'].includes(type);
     if (isElementwiseUnary && inputCards.length > 0) {
       setupElementwiseHover(inputCards, outputCard);
     }

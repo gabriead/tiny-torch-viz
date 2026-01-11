@@ -7,7 +7,7 @@ emit trace events for visualization.
 
 from tinytorch.core.tensor import Tensor
 from tinytorch.core.layers import Layer
-from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax
+from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax, LogSoftmax
 from tinytorch.core.losses import MSELoss, CrossEntropyLoss
 
 
@@ -220,7 +220,7 @@ class Instrumentor:
         self._wrap_layer_forward()
         
         # Activations - these don't inherit from Layer
-        for activation_cls in [ReLU, Sigmoid, Tanh, GELU, Softmax]:
+        for activation_cls in [ReLU, Sigmoid, Tanh, GELU, Softmax, LogSoftmax]:
             self._wrap_activation(activation_cls)
         
         # Losses
@@ -238,6 +238,7 @@ class Instrumentor:
             "Tanh": Tanh,
             "GELU": GELU,
             "Softmax": Softmax,
+            "LogSoftmax": LogSoftmax,
             "MSELoss": MSELoss,
             "CrossEntropyLoss": CrossEntropyLoss,
         }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import os
 import queue
 import traceback
 from pathlib import Path
@@ -262,3 +263,25 @@ async def ws_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         return
+
+
+# Entry point for running the app
+if __name__ == "__main__":
+    import uvicorn
+    
+    # Support for Hugging Face Spaces (uses port 7860) and local development
+    # HF Spaces sets SPACE_ID environment variable
+    is_hf_space = os.environ.get("SPACE_ID") is not None
+    
+    # Get host and port from environment variables, with sensible defaults
+    host = os.environ.get("HOST", "0.0.0.0" if is_hf_space else "127.0.0.1")
+    port = int(os.environ.get("PORT", "7860" if is_hf_space else "8000"))
+    
+    print(f"Starting TinyTorch Visualizer on http://{host}:{port}")
+    if is_hf_space:
+        print("Running in Hugging Face Spaces mode")
+    else:
+        print("Running in local development mode")
+        print(f"Open http://localhost:{port} in your browser")
+    
+    uvicorn.run(app, host=host, port=port)

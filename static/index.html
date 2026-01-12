@@ -776,20 +776,39 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     
     // Map tensor IDs to group IDs (only unclaimed groups)
     // Also traces back to include ancestor operations that produced the inputs
+    // but stops at tensors that are explicitly listed in OTHER boxes
     function getGroupIdsForTensors(tensorIds, includeAncestors = true) {
       const gids = [];
       const visited = new Set();
+      const tensorIdSet = new Set(tensorIds);
       
-      function addGroup(tid) {
+      // Get all tensor IDs that are explicitly specified in OTHER boxes
+      // These act as "boundaries" - we don't trace ancestors past these
+      const otherBoxTensorIds = new Set();
+      pendingBoxes.forEach(pb => {
+        pb.tensorIds.forEach(tid => {
+          if (!tensorIdSet.has(tid)) {
+            otherBoxTensorIds.add(tid);
+          }
+        });
+      });
+      
+      function addGroup(tid, isExplicit = false) {
         if (visited.has(tid)) return;
         visited.add(tid);
+        
+        // Don't trace ancestors past tensors that belong to other boxes
+        // unless this tensor is explicitly listed in our box
+        if (!isExplicit && otherBoxTensorIds.has(tid)) {
+          return;
+        }
         
         const g = groups.find(gr => gr.outputId === tid);
         if (g && !gids.includes(g.id) && !claimedGroupIds.has(g.id)) {
           // If includeAncestors, first add groups that produced this group's inputs
           // This ensures operations are added in execution order (ancestors first)
           if (includeAncestors && g.inputIds) {
-            g.inputIds.forEach(inputId => addGroup(inputId));
+            g.inputIds.forEach(inputId => addGroup(inputId, false));
           }
           
           // Then add this group
@@ -797,7 +816,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
         }
       }
       
-      tensorIds.forEach(tid => addGroup(tid));
+      tensorIds.forEach(tid => addGroup(tid, true));
       return gids;
     }
     

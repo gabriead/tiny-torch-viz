@@ -2,8 +2,6 @@ name: Sync to Hugging Face Hub
 on:
   push:
     branches: [main]
-
-  # to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
@@ -14,12 +12,12 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
-      - name: Push to hub
+
+      - name: Push to Hugging Face Space
         env:
-            HF_TOKEN: ${{ secrets.HF_TOKEN }}
-            HF_USERNAME: ${{ vars.HF_USERNAME }}   # or secrets.HF_USERNAME
-            SPACE_NAME: ${{ vars.HF_SPACE }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE: ${{ vars.HF_SPACE }}
         run: |
           set -euo pipefail
           echo "Pushing to Space: ${HF_SPACE}"
-          git push "https://gabriead:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" main
+          git push "https://gabriead:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" main --force

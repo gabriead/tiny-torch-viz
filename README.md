@@ -1,3 +1,13 @@
+---
+title: TinyTorch Viz
+emoji: 🔥
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 
 # TinyTorch Viz 🔥
 
@@ -247,16 +257,6 @@ TinyTorch/
 └── tinytorch/
     └── core/              # Core ML library implementation
 ```
-
----
-title: TinyTorch Viz
-emoji: 🔥
-colorFrom: blue
-colorTo: purple
-sdk: docker
-app_port: 7860
-pinned: false
----
 
 
 ## License

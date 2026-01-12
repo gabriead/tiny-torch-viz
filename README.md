@@ -32,7 +32,7 @@ Open http://localhost:8000 in your browser.
 
 ## ✨ Features
 
-- **Visual Code Execution:** Write TinyTorch code and instantly generate a dynamic visual graph of your tensors and operations. This connects abstract code to concrete visual structures, deepening your understanding of neural network mechanics.
+- **Visual Code Execution:** Write TinyTorch code and instantly generate a dynamic visual representation of your tensors and operations. This connects abstract code to concrete visual structures, deepening your understanding of neural network mechanics.
     
 - **Build Architectures from Scratch:** Create complete Deep Learning models layer-by-layer, visualizing the flow of data and gradients through every component.
     
@@ -40,9 +40,9 @@ Open http://localhost:8000 in your browser.
     
 - **Side-by-Side PDF Learning:** Open research papers or tutorials directly within the app to code alongside the text, enabling immediate implementation and verification of concepts.
     
-- **Rich Annotations:** Add notes with full LaTeX support to explain mathematical formulas, document layer logic, or leave reminders directly on your visual graph.
+- **Rich Annotations:** Add notes with full LaTeX support to explain mathematical formulas, document layer logic, or leave reminders directly on your visual representation.
     
-- **Save & Share:** Export your entire workspace—including code, visual graph, and notes—as a JSON file to share your educational content or resume work later.
+- **Save & Share:** Export your entire workspace—including code, visual representation, and notes—as a JSON file to share your educational content or resume work later.
     
 - **Retro Mode:** Switch to a distinct retro-styled UI for a focused, nostalgic coding experience.
     

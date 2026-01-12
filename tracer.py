@@ -176,5 +176,9 @@ class Tracer:
     def error(self, message: str) -> None:
         self.sink.emit(TraceEvent("error", {"message": str(message)}).asdict())
 
+    def print(self, text: str, msg_type: str = "info") -> None:
+        """Emit a print event for console output."""
+        self.sink.emit(TraceEvent("print", {"text": str(text), "type": msg_type}).asdict())
+
     def done(self) -> None:
         self.sink.emit(TraceEvent("done", {}).asdict())

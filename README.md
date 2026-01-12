@@ -49,7 +49,7 @@ Open http://localhost:8000 in your browser.
 
 ## ⚠️ Important Note on Math Notation
 
-**I changed the order of matrix multiplication from $x \cdot W$ to $W \cdot x$.**
+**I changed the order of matrix multiplication from $x \cdot W$ to $W \cdot x$ in the Linear layer following the learning concept of Prof. Tom Yeh.**
 
 This follows the [AI by Hand](https://www.byhand.ai/) teaching methodology. While standard libraries often use `input @ weights`, this tool visualizes weights first to align with standard mathematical notation found in linear algebra textbooks.
 

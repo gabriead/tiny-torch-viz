@@ -1,3 +1,14 @@
+---
+title: TinyTorch Viz
+emoji: 🔥
+colorFrom: blue
+colorTo: purple
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
+
 # TinyTorch Viz 🔥
 
 A lightweight, educational framework built to visualize your deep learning architectures and foster a deep mathematical intuition.

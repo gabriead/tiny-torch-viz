@@ -152,7 +152,8 @@ class Instrumentor:
         
         def make_wrapped(orig, name):
             def wrapped(instance, x, *args, **kwargs):
-                # Set flag to suppress internal tensor op tracing
+                # Check if we're already inside a layer to prevent double-tracing
+                # (__call__ calls forward, both are wrapped)
                 was_inside = instrumentor._inside_layer
                 instrumentor._inside_layer = True
                 try:
@@ -160,8 +161,10 @@ class Instrumentor:
                 finally:
                     instrumentor._inside_layer = was_inside
                 
-                meta = {'activation_type': name}
-                instrumentor.tracer.op(name.lower(), [x], result, meta)
+                # Only emit event if this is the outermost call
+                if not was_inside:
+                    meta = {'activation_type': name}
+                    instrumentor.tracer.op(name.lower(), [x], result, meta)
                 return result
             return wrapped
         
@@ -184,7 +187,7 @@ class Instrumentor:
         
         def make_wrapped(orig, name):
             def wrapped(instance, predictions, targets, *args, **kwargs):
-                # Set flag to suppress internal tensor op tracing
+                # Check if we're already inside a layer to prevent double-tracing
                 was_inside = instrumentor._inside_layer
                 instrumentor._inside_layer = True
                 try:
@@ -192,8 +195,10 @@ class Instrumentor:
                 finally:
                     instrumentor._inside_layer = was_inside
                 
-                meta = {'loss_type': name}
-                instrumentor.tracer.op(name.lower(), [predictions, targets], result, meta)
+                # Only emit event if this is the outermost call
+                if not was_inside:
+                    meta = {'loss_type': name}
+                    instrumentor.tracer.op(name.lower(), [predictions, targets], result, meta)
                 return result
             return wrapped
         

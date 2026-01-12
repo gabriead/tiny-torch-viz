@@ -957,16 +957,39 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
       return gids;
     }
     
-    // Build parent-child relationships using explicit parentBox field
+    // Build parent-child relationships - detect automatically based on tensor containment
+    // A box is a parent of another if it contains ALL tensors of the child box
     const boxesByLabel = {};
-    const rootBoxes = [];
     
     pendingBoxes.forEach(pb => {
       boxesByLabel[pb.label] = pb;
-      if (!pb.parent) {
-        rootBoxes.push(pb);
-      }
+      pb.detectedChildren = [];  // Track detected child boxes
     });
+    
+    // Detect parent-child relationships based on tensor containment
+    pendingBoxes.forEach(potentialParent => {
+      const parentTensorSet = new Set(potentialParent.tensorIds || []);
+      
+      pendingBoxes.forEach(potentialChild => {
+        if (potentialParent === potentialChild) return;
+        
+        const childTensors = potentialChild.tensorIds || [];
+        if (childTensors.length === 0) return;
+        
+        // Check if parent contains ALL tensors of child
+        const allContained = childTensors.every(tid => parentTensorSet.has(tid));
+        
+        // Also check parent has MORE tensors (not equal - otherwise both would be parents of each other)
+        if (allContained && parentTensorSet.size > childTensors.length) {
+          // potentialChild is a child of potentialParent
+          potentialChild.parent = potentialParent.label;
+          potentialParent.detectedChildren.push(potentialChild.label);
+        }
+      });
+    });
+    
+    // Root boxes are those with no parent
+    const rootBoxes = pendingBoxes.filter(pb => !pb.parent);
     
     // Recursive function to create box hierarchy
     function createBoxHierarchy(pending, startY, startX) {

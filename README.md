@@ -28,7 +28,6 @@ uv run uvicorn app:app --host 0.0.0.0 --port 8000
 
 Open http://localhost:8000 in your browser.
 
-
 ---
 
 ## ✨ Features
@@ -55,6 +54,17 @@ Open http://localhost:8000 in your browser.
 This follows the [AI by Hand](https://www.byhand.ai/) teaching methodology. While standard libraries often use `input @ weights`, this tool visualizes weights first to align with standard mathematical notation found in linear algebra textbooks.
 
 ---
+
+
+## 💡 Ideas to get started
+
+- **Visualize Basic Operations:** Start simple by creating two tensors and visualizing their addition or matrix multiplication. This helps you understand how `box()` commands group operations in the UI.
+    
+- **Recreate a Textbook Example:** Take a small neural network diagram from a textbook or paper and implement it layer-by-layer to see if the data flow matches your expectation.
+    
+- **Debug a "Shape Mismatch":** Intentionally create a dimension error (like multiplying `(4,8)` by `(4,16)`) to see how the visualizer handles it versus standard Python error messages.
+    
+- **Annotate Your Math:** Use the LaTeX note feature to write down the formula $y = \sigma(Wx + b)$ next to your Linear layer visualization to connect the code to the math.
 
 ## 📚 Core API Reference
 

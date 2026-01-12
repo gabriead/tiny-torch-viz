@@ -20,4 +20,6 @@ jobs:
             HF_USERNAME: ${{ vars.HF_USERNAME }}   # or secrets.HF_USERNAME
             SPACE_NAME: ${{ vars.HF_SPACE }}
         run: |
-         git push https://${HF_USERNAME}:${HF_TOKEN}@huggingface.co/spaces/${HF_USERNAME}/${SPACE_NAME} main
+          set -euo pipefail
+          echo "Pushing to Space: ${HF_SPACE}"
+          git push "https://gabriead:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" main

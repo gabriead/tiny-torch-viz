@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import ast
 import asyncio
+import io
 import os
 import queue
+import sys
 import traceback
 from pathlib import Path
 from typing import Any, Dict
@@ -205,6 +207,22 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
     }
 
 
+class PrintCapture(io.StringIO):
+    """Captures print output and sends it to the tracer."""
+    def __init__(self, tracer: Tracer):
+        super().__init__()
+        self.tracer = tracer
+        
+    def write(self, text: str) -> int:
+        # Send non-empty text to tracer
+        if text and text.strip():
+            self.tracer.print(text.rstrip('\n'))
+        return len(text)
+    
+    def flush(self):
+        pass
+
+
 def _run_user_code(code: str, tracer: Tracer) -> None:
     # 1. Transform code to auto-capture variable names
     transformed_code = transform_code(code)
@@ -212,14 +230,19 @@ def _run_user_code(code: str, tracer: Tracer) -> None:
     # 2. Setup Environment
     env = _make_exec_env(tracer)
 
-    # 3. Instrument Tensor/Layer classes to talk to our tracer
+    # 3. Redirect stdout to capture print statements
+    old_stdout = sys.stdout
+    sys.stdout = PrintCapture(tracer)
+
+    # 4. Instrument Tensor/Layer classes to talk to our tracer
     with Instrumentor(tracer):
         try:
-            # 4. Execute transformed code
+            # 5. Execute transformed code
             exec(transformed_code, env, env)
         except Exception:
             tracer.error(traceback.format_exc())
         finally:
+            sys.stdout = old_stdout
             tracer.done()
 
 

@@ -102,48 +102,62 @@ class Instrumentor:
         setattr(Tensor, method_name, wrapped)
 
     def _wrap_layer_forward(self):
-        """Wraps Layer.__call__ to emit trace events for layer operations."""
-        if not hasattr(Layer, '__call__'):
-            return
-            
-        original = Layer.__call__
-        self.original_methods["Layer.__call__"] = original
+        """Wraps Layer.__call__ and concrete layer forward methods."""
         instrumentor = self  # Capture reference for closure
+        
+        # Import Linear here to wrap its forward method specifically
+        from tinytorch.core.layers import Linear, Dropout
 
-        def wrapped(instance, x, *args, **kwargs):
-            # Set flag to suppress internal tensor op tracing
-            was_inside = instrumentor._inside_layer
-            instrumentor._inside_layer = True
-            try:
-                # Execute original logic
-                result = original(instance, x, *args, **kwargs)
-            finally:
-                instrumentor._inside_layer = was_inside
+        def make_layer_wrapper(layer_cls):
+            def make_wrapped(orig):
+                def wrapped(instance, x, *args, **kwargs):
+                    # Set flag to suppress internal tensor op tracing
+                    was_inside = instrumentor._inside_layer
+                    instrumentor._inside_layer = True
+                    try:
+                        # Execute original logic
+                        result = orig(instance, x, *args, **kwargs)
+                    finally:
+                        instrumentor._inside_layer = was_inside
 
-            # Get the layer name
-            layer_name = instance.__class__.__name__
+                    # Only emit event if this is the outermost call (prevent double-tracing)
+                    if not was_inside:
+                        # Get the layer name
+                        layer_name = instance.__class__.__name__
 
-            # Build inputs list - for Linear, include weight and bias
-            inputs = [x]
-            meta = {'layer_type': layer_name}
-            
-            # For Linear layers, include weight and bias for visualization
-            if layer_name == 'Linear':
-                if hasattr(instance, 'weight'):
-                    #inputs.append(instance.weight)
-                    inputs.insert(0, instance.weight)
+                        # Build inputs list - for Linear, include weight and bias
+                        inputs = [x]
+                        meta = {'layer_type': layer_name}
+                        
+                        # For Linear layers, include weight and bias for visualization
+                        if layer_name == 'Linear':
+                            if hasattr(instance, 'weight'):
+                                inputs.insert(0, instance.weight)
+                                meta['has_weight'] = True
+                            if hasattr(instance, 'bias') and instance.bias is not None:
+                                inputs.append(instance.bias)
+                                meta['has_bias'] = True
 
-                    meta['has_weight'] = True
-                if hasattr(instance, 'bias') and instance.bias is not None:
-                    inputs.append(instance.bias)
-                    meta['has_bias'] = True
+                        # Emit op event for the layer
+                        instrumentor.tracer.op(layer_name.lower(), inputs, result, meta)
 
-            # Emit op event for the layer
-            instrumentor.tracer.op(layer_name.lower(), inputs, result, meta)
+                    return result
+                return wrapped
+            return make_wrapped
 
-            return result
-
-        setattr(Layer, "__call__", wrapped)
+        # Wrap Layer.__call__
+        if hasattr(Layer, '__call__'):
+            original_call = Layer.__call__
+            self.original_methods["Layer.__call__"] = original_call
+            setattr(Layer, "__call__", make_layer_wrapper(Layer)(original_call))
+        
+        # Wrap concrete layer forward methods (Linear, Dropout, etc.)
+        for layer_cls in [Linear, Dropout]:
+            if hasattr(layer_cls, 'forward'):
+                cls_name = layer_cls.__name__
+                original_forward = layer_cls.forward
+                self.original_methods[f"{cls_name}.forward"] = original_forward
+                setattr(layer_cls, "forward", make_layer_wrapper(layer_cls)(original_forward))
 
     def _wrap_activation(self, activation_cls):
         """Wraps an activation class's __call__ and forward methods."""

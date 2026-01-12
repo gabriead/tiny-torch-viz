@@ -107,6 +107,90 @@
     #run:hover { background: #2563eb; }
     #run:disabled { background: #475569; cursor: not-allowed; }
     #error { color: #ef4444; font-size: 12px; min-height: 20px; font-family: monospace; white-space: pre-wrap; }
+    
+    /* Console output area */
+    #console-container {
+      margin-top: 12px;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      background: #0a0f1a;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      min-height: 60px;
+      height: 150px;
+      flex-shrink: 0;
+    }
+    #console-resizer {
+      height: 6px;
+      background: transparent;
+      cursor: ns-resize;
+      position: relative;
+      flex-shrink: 0;
+    }
+    #console-resizer::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 3px;
+      background: #475569;
+      border-radius: 2px;
+      transition: background 0.2s;
+    }
+    #console-resizer:hover::after {
+      background: #64748b;
+    }
+    #console-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.5px;
+    }
+    #console-clear {
+      background: none;
+      border: none;
+      color: #64748b;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    #console-clear:hover {
+      background: #334155;
+      color: #f1f5f9;
+    }
+    #console-output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #console-output .console-line {
+      margin: 2px 0;
+    }
+    #console-output .console-line.error {
+      color: #f87171;
+    }
+    #console-output .console-line.success {
+      color: #4ade80;
+    }
+    #console-output .console-line.info {
+      color: #60a5fa;
+    }
 
     #pdfSidebar {
       flex: 1 1 340px;
@@ -533,6 +617,32 @@
       color: #ff4444;
       text-shadow: 0 0 4px rgba(255, 68, 68, 0.5);
     }
+    
+    /* Console in retro mode */
+    body.retro-mode #console-resizer::after {
+      background: rgba(0, 255, 65, 0.3);
+    }
+    body.retro-mode #console-resizer:hover::after {
+      background: rgba(0, 255, 65, 0.6);
+    }
+    body.retro-mode #console-container {
+      border-color: rgba(0, 255, 65, 0.3);
+      background: rgba(0, 10, 5, 0.8);
+    }
+    body.retro-mode #console-header {
+      background: rgba(0, 40, 20, 0.6);
+      border-bottom-color: rgba(0, 255, 65, 0.2);
+      color: #00ff41;
+      text-shadow: 0 0 4px rgba(0, 255, 65, 0.5);
+    }
+    body.retro-mode #console-output {
+      color: #00ff41;
+      text-shadow: 0 0 2px rgba(0, 255, 65, 0.3);
+    }
+    body.retro-mode #console-output .console-line.error {
+      color: #ff4444;
+      text-shadow: 0 0 4px rgba(255, 68, 68, 0.5);
+    }
 
     /* Status dot glow */
     body.retro-mode .status-dot {
@@ -612,6 +722,14 @@ box("Layer 3: Linear + Softmax", [a2, z3, y_pred], "4")
 box("Loss Computation", [y_pred, target_probs, loss], "6")
     </textarea>
     <button id="run">Run</button>
+    <div id="console-resizer"></div>
+    <div id="console-container">
+      <div id="console-header">
+        <span>CONSOLE OUTPUT</span>
+        <button id="console-clear" title="Clear console">✕</button>
+      </div>
+      <div id="console-output"></div>
+    </div>
     <div id="error"></div>
   </div>
   <div class="v-resizer" data-left="editor"></div>
@@ -724,6 +842,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
         nextGroupId = 1;
         nextBoxId = 1;
         document.getElementById('error').textContent = '';
+        clearConsole();
         break;
       case 'tensor':
         tensors[msg.id] = { id: msg.id, shape: msg.shape, data: msg.data, name: msg.name };
@@ -745,11 +864,29 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
         break;
       case 'error':
         document.getElementById('error').textContent = msg.message;
+        appendToConsole(msg.message, 'error');
+        break;
+      case 'print':
+        appendToConsole(msg.text, msg.type || 'info');
         break;
       case 'done':
         layoutAndRender();
         break;
     }
+  }
+  
+  // ==================== Console Output ====================
+  function appendToConsole(text, type = 'info') {
+    const consoleOutput = document.getElementById('console-output');
+    const line = document.createElement('div');
+    line.className = 'console-line ' + type;
+    line.textContent = text;
+    consoleOutput.appendChild(line);
+    consoleOutput.scrollTop = consoleOutput.scrollHeight;
+  }
+  
+  function clearConsole() {
+    document.getElementById('console-output').innerHTML = '';
   }
 
   // ==================== Layout ====================
@@ -1495,6 +1632,44 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     });
   }
 
+  // ==================== Transpose Hover Highlighting ====================
+  // For transpose, output[i,j] corresponds to input[j,i]
+  function setupTransposeHover(inputCard, outputCard) {
+    const outputTable = outputCard.querySelector('.matrix-table');
+    const inputTable = inputCard.querySelector('.matrix-table');
+    
+    if (!outputTable || !inputTable) return;
+    
+    const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
+    
+    outputCells.forEach(cell => {
+      cell.style.cursor = 'pointer';
+      
+      cell.addEventListener('mouseenter', () => {
+        const row = cell.dataset.row;
+        const col = cell.dataset.col;
+        
+        // Highlight the output cell
+        cell.classList.add('highlight-cell');
+        
+        // For transpose: input[col, row] -> output[row, col]
+        // So to find the source, swap row and col
+        const inputCell = inputTable.querySelector(`td[data-row="${col}"][data-col="${row}"]`);
+        if (inputCell) {
+          inputCell.classList.add('highlight-cell');
+        }
+      });
+      
+      cell.addEventListener('mouseleave', () => {
+        // Remove all highlights
+        cell.classList.remove('highlight-cell');
+        inputTable.querySelectorAll('td.highlight-cell').forEach(td => {
+          td.classList.remove('highlight-cell');
+        });
+      });
+    });
+  }
+
   // ==================== Matmul Hover Highlighting ====================
   function setupMatmulHover(wrapper, leftCard, topCard, resultCard) {
     const resultTable = resultCard.querySelector('.matrix-table');
@@ -1703,7 +1878,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     
     if (isMatmul) {
       // Matrix multiplication: keep grid layout for proper alignment
-      const grid = document.createElement('div');
+    const grid = document.createElement('div');
       grid.className = 'layout-grid layout-binary';
     
       const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0], 'auto', 'left');
@@ -1748,7 +1923,7 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     }
     
     const inputCards = [];
-    if (inputs[0]) {
+      if (inputs[0]) {
       const inputLabel = getInputDisplayName(inputs[0]);
       const inputCard = createMatrixCard(inputLabel, inputs[0], 'auto', 'input');
       grid.appendChild(inputCard);
@@ -1757,10 +1932,16 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
     const outputCard = createMatrixCard(output.name || type, output, outputOrientation, 'output');
     grid.appendChild(outputCard);
     
-    // Add element-wise hover highlighting for activations and element-wise ops
-    const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax'].includes(type);
-    if (isElementwiseUnary && inputCards.length > 0) {
-      setupElementwiseHover(inputCards, outputCard);
+    // Add hover highlighting based on operation type
+    if (type === 'transpose' && inputCards.length > 0) {
+      // Transpose: output[i,j] corresponds to input[j,i]
+      setupTransposeHover(inputCards[0], outputCard);
+    } else {
+      // Element-wise activations: output[i,j] corresponds to input[i,j]
+      const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax'].includes(type);
+      if (isElementwiseUnary && inputCards.length > 0) {
+        setupElementwiseHover(inputCards, outputCard);
+      }
     }
     
     container.appendChild(grid);
@@ -2172,6 +2353,39 @@ box("Loss Computation", [y_pred, target_probs, loss], "6")
   document.getElementById('code').onkeydown = e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); runCode(); }
   };
+  document.getElementById('console-clear').onclick = clearConsole;
+
+  // ==================== Console Resizer ====================
+  (function() {
+    const resizer = document.getElementById('console-resizer');
+    const consoleContainer = document.getElementById('console-container');
+    let startY, startHeight;
+    
+    resizer.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      startY = e.clientY;
+      startHeight = consoleContainer.offsetHeight;
+      
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'ns-resize';
+      document.body.style.userSelect = 'none';
+    });
+    
+    function onMouseMove(e) {
+      // Dragging up increases height (startY - e.clientY is positive when moving up)
+      const deltaY = startY - e.clientY;
+      const newHeight = Math.max(60, Math.min(400, startHeight + deltaY));
+      consoleContainer.style.height = newHeight + 'px';
+    }
+    
+    function onMouseUp() {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+  })();
 
   // ==================== Init ====================
   // Restore retro mode preference

@@ -58,6 +58,7 @@ This follows the [AI by Hand](https://www.byhand.ai/) teaching methodology. Whil
 ## 📚 Core API Reference
 
 Please look at the great work done by [TinyTorch](https://mlsysbook.ai/tinytorch/intro.html) for a complete API reference. Below are the currently enabled features for visualization.
+The examples are all taken freom the TinyTorch API.
 
 ### 📦 Tensor
 

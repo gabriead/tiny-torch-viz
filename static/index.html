@@ -673,53 +673,35 @@
   <div id="editor">
     <h2><span class="status-indicator" id="wsStatus"></span> TINYTORCH PYTHON CODE</h2>
     <textarea id="code" spellcheck="false">
-# TinyTorch: 3-Layer Neural Network Example
-# Demonstrates: Layers, Activations, Loss Functions
 import numpy as np
+import math
 
-# === Create Sample Data ===
-# 4 samples, 8 input features
-X = Tensor(np.random.randn(4, 4))
-# Target: class indices for 3 classes
-y_true = Tensor([0, 1, 2, 1])
+#Scaled Dot Attention
 
-# === Build 3-Layer Neural Network ===
-# Layer 1: Input(4) -> Hidden(4)
-layer1 = Linear(4, 4)
-relu1 = ReLU()
+x = Tensor(np.random.rand(4,4))
 
-# Layer 2: Hidden(4) -> Hidden(4)
-layer2 = Linear(4, 4)
-relu2 = ReLU()
+w_q = Tensor(np.random.rand(4,4))
+w_k = Tensor(np.random.rand(4,4))
+w_v = Tensor(np.random.rand(4,4))
 
-# Layer 3: Hidden(4) -> Output(3)
-layer3 = Linear(4, 3)
+Q = w_q.matmul(x)
+K = w_k.matmul(x)
+V = w_v.matmul(x)
+
+box("Q", Q, "1")
+box("K", K, "22")
+box("V", V, "3")
+
+k_transpose = K.transpose()
+scores = Q.matmul(k_transpose)
+scaling_factor = 1/math.sqrt(x.shape[0])
+scaled_scores = scores * scaling_factor
 softmax = Softmax()
+softmaxed_scores  = softmax.forward(scaled_scores)
 
-# === Forward Pass ===
-# Layer 1
-z1 = layer1(X)
-a1 = relu1(z1)
+attn_scores = softmaxed_scores.matmul(V)
+box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_scores], "4")
 
-# Layer 2
-z2 = layer2(a1)
-a2 = relu2(z2)
-
-# Layer 3 (output)
-z3 = layer3(a2)
-y_pred = softmax(z3)
-
-# === Compute Loss ===
-loss_fn = MSELoss()
-# For MSE, create target probabilities
-target_probs = Tensor(np.eye(3)[[0, 1, 2, 1]])
-loss = loss_fn(y_pred, target_probs)
-
-# === Visualize Network Structure ===
-box("Layer 1: Linear + ReLU", [X, z1, a1], "2")
-box("Layer 2: Linear + ReLU", [a1, z2, a2], "3")
-box("Layer 3: Linear + Softmax", [a2, z3, y_pred], "4")
-box("Loss Computation", [y_pred, target_probs, loss], "6")
     </textarea>
     <button id="run">Run</button>
     <div id="console-resizer"></div>

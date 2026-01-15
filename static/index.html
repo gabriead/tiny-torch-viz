@@ -694,10 +694,10 @@ box("V", V, "3")
 
 k_transpose = K.transpose()
 scores = Q.matmul(k_transpose)
-scaling_factor = 1/math.sqrt(x.shape[0])
+scaling_factor = 1/math.sqrt(x.shape[-1])
 scaled_scores = scores * scaling_factor
 softmax = Softmax()
-softmaxed_scores  = softmax.forward(scaled_scores)
+softmaxed_scores  = softmax.forward(scaled_scores, dim=-1)
 
 attn_scores = softmaxed_scores.matmul(V)
 box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_scores], "4")

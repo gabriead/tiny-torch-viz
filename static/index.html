@@ -1747,55 +1747,60 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   // ==================== Tensor Flow Highlighting ====================
   // Highlights all occurrences of a tensor when hovering over any matrix card
   function setupTensorFlowHighlighting() {
-    try {
-      const canvasContent = document.getElementById('canvas-content');
-      if (!canvasContent) return;
+    const canvasContent = document.getElementById('canvas-content');
+    if (!canvasContent) return;
+    
+    // Get all matrix cards
+    const allCards = Array.from(canvasContent.querySelectorAll('.matrix-card'));
+    
+    // Build map using the displayed label (variable name) for matching
+    const labelCardMap = {};  // label -> [cards]
+    
+    allCards.forEach(card => {
+      // Get the displayed label from the title
+      const titleSpan = card.querySelector('.matrix-title span');
+      if (!titleSpan) return;
       
-      // Get all matrix cards
-      const allCards = Array.from(canvasContent.querySelectorAll('.matrix-card'));
+      let label = titleSpan.textContent.trim();
+      // Remove .T suffix for matching (Q.T should match Q)
+      const baseLabel = label.replace(/\.T$/, '');
       
-      // Build map using the displayed label (variable name) for matching
-      const labelCardMap = {};  // label -> [cards]
-      
-      allCards.forEach(card => {
-        // Get the displayed label from the title
-        const titleSpan = card.querySelector('.matrix-title span');
-        if (!titleSpan) return;
-        
-        let label = titleSpan.textContent.trim();
-        // Remove .T suffix for matching (Q.T should match Q)
-        const baseLabel = label.replace(/\.T$/, '');
-        
-        if (!labelCardMap[baseLabel]) labelCardMap[baseLabel] = [];
-        labelCardMap[baseLabel].push(card);
-      });
-      
-      // Set up hover for cards that share a label
-      allCards.forEach(card => {
-        const titleSpan = card.querySelector('.matrix-title span');
-        if (!titleSpan) return;
-        
-        let label = titleSpan.textContent.trim();
-        const baseLabel = label.replace(/\.T$/, '');
-        
-        const matchingCards = labelCardMap[baseLabel] || [];
-        
-        // Only set up hover if this label appears multiple times
-        if (matchingCards.length > 1) {
-          card.style.cursor = 'pointer';
-          
-          card.addEventListener('mouseenter', () => {
-            matchingCards.forEach(c => c.classList.add('tensor-flow-highlight'));
-          });
-          
-          card.addEventListener('mouseleave', () => {
-            matchingCards.forEach(c => c.classList.remove('tensor-flow-highlight'));
-          });
-        }
-      });
-    } catch (err) {
-      console.error('Error in setupTensorFlowHighlighting:', err);
+      if (!labelCardMap[baseLabel]) labelCardMap[baseLabel] = [];
+      labelCardMap[baseLabel].push(card);
+    });
+    
+    // Find labels that appear multiple times
+    const multiUseLabels = Object.entries(labelCardMap)
+      .filter(([_, cards]) => cards.length > 1)
+      .map(([label, cards]) => `${label}(${cards.length})`);
+    
+    if (multiUseLabels.length > 0) {
+      console.log('Tensor flow: hover to highlight:', multiUseLabels.join(', '));
     }
+    
+    // Set up hover for cards that share a label
+    allCards.forEach(card => {
+      const titleSpan = card.querySelector('.matrix-title span');
+      if (!titleSpan) return;
+      
+      let label = titleSpan.textContent.trim();
+      const baseLabel = label.replace(/\.T$/, '');
+      
+      const matchingCards = labelCardMap[baseLabel] || [];
+      
+      // Only set up hover if this label appears multiple times
+      if (matchingCards.length > 1) {
+        card.style.cursor = 'pointer';
+        
+        card.addEventListener('mouseenter', () => {
+          matchingCards.forEach(c => c.classList.add('tensor-flow-highlight'));
+        });
+        
+        card.addEventListener('mouseleave', () => {
+          matchingCards.forEach(c => c.classList.remove('tensor-flow-highlight'));
+        });
+      }
+    });
   }
 
   // ==================== Render Operation ====================

@@ -303,6 +303,20 @@
       box-shadow: inset 0 0 0 2px #fbbf24;
     }
     
+    /* Tensor flow highlighting - same tensor used in multiple places */
+    .matrix-card.tensor-flow-highlight {
+      box-shadow: 0 0 0 3px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5);
+      border-color: #f59e0b;
+      transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .matrix-card[data-tensor-id] {
+      cursor: pointer;
+    }
+    .retro-mode .matrix-card.tensor-flow-highlight {
+      box-shadow: 0 0 0 3px #00ff00, 0 0 25px rgba(0, 255, 0, 0.6);
+      border-color: #00ff00;
+    }
+    
     /* Retro mode highlights */
     body.retro-mode .matrix-table td.highlight-row {
       background: rgba(0, 255, 255, 0.2);
@@ -1513,6 +1527,9 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     };
     
     applyZoom();
+    
+    // Set up tensor flow highlighting after render is complete
+    setupTensorFlowHighlighting();
   }
 
   // ==================== Tensor to 2D ====================
@@ -1551,6 +1568,14 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     const card = document.createElement('div');
     card.className = 'matrix-card';
     if (role) card.dataset.role = role;
+    // Store tensor ID and name for flow highlighting
+    if (tensor && (tensor.id !== undefined && tensor.id !== null)) {
+      card.dataset.tensorId = String(tensor.id);
+    }
+    // Also store tensor name for name-based matching
+    if (tensor && tensor.name) {
+      card.dataset.tensorName = tensor.name;
+    }
     card.innerHTML = `<div class="matrix-title"><span>${label}</span><span class="matrix-shape">${shapeStr}</span></div>`;
     if (showMatrixData && mat.length > 0 && mat[0].length > 0) {
       const table = document.createElement('table');
@@ -1717,6 +1742,60 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         });
       });
     });
+  }
+
+  // ==================== Tensor Flow Highlighting ====================
+  // Highlights all occurrences of a tensor when hovering over any matrix card
+  function setupTensorFlowHighlighting() {
+    try {
+      const canvasContent = document.getElementById('canvas-content');
+      if (!canvasContent) return;
+      
+      // Get all matrix cards
+      const allCards = Array.from(canvasContent.querySelectorAll('.matrix-card'));
+      
+      // Build map using the displayed label (variable name) for matching
+      const labelCardMap = {};  // label -> [cards]
+      
+      allCards.forEach(card => {
+        // Get the displayed label from the title
+        const titleSpan = card.querySelector('.matrix-title span');
+        if (!titleSpan) return;
+        
+        let label = titleSpan.textContent.trim();
+        // Remove .T suffix for matching (Q.T should match Q)
+        const baseLabel = label.replace(/\.T$/, '');
+        
+        if (!labelCardMap[baseLabel]) labelCardMap[baseLabel] = [];
+        labelCardMap[baseLabel].push(card);
+      });
+      
+      // Set up hover for cards that share a label
+      allCards.forEach(card => {
+        const titleSpan = card.querySelector('.matrix-title span');
+        if (!titleSpan) return;
+        
+        let label = titleSpan.textContent.trim();
+        const baseLabel = label.replace(/\.T$/, '');
+        
+        const matchingCards = labelCardMap[baseLabel] || [];
+        
+        // Only set up hover if this label appears multiple times
+        if (matchingCards.length > 1) {
+          card.style.cursor = 'pointer';
+          
+          card.addEventListener('mouseenter', () => {
+            matchingCards.forEach(c => c.classList.add('tensor-flow-highlight'));
+          });
+          
+          card.addEventListener('mouseleave', () => {
+            matchingCards.forEach(c => c.classList.remove('tensor-flow-highlight'));
+          });
+        }
+      });
+    } catch (err) {
+      console.error('Error in setupTensorFlowHighlighting:', err);
+    }
   }
 
   // ==================== Render Operation ====================

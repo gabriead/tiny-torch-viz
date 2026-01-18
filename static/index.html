@@ -1248,8 +1248,14 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     
     // Helper to generate label from group data using current tensor names
     function getGroupLabel(g) {
-      const output = tensors[g.outputId];
-      const inputs = (g.inputIds || []).map(id => tensors[id]).filter(Boolean);
+      // Helper to get tensor or create placeholder for missing tensor
+      function getOrPlaceholder(id) {
+        if (tensors[id]) return tensors[id];
+        return { id, shape: [], data: [], name: id };
+      }
+      
+      const output = getOrPlaceholder(g.outputId);
+      const inputs = (g.inputIds || []).map(id => getOrPlaceholder(id));
       const outputName = output?.name || g.opType;
       
       // For linear layers, only show the original input (not weight/bias)
@@ -1284,8 +1290,15 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     
     // Helper to build op object from group data
     function getGroupOp(g) {
-      const output = tensors[g.outputId];
-      const inputs = (g.inputIds || []).map(id => tensors[id]).filter(Boolean);
+      // Create placeholder tensor if missing (for backward-compatible JSON loading)
+      function getOrPlaceholder(id) {
+        if (tensors[id]) return tensors[id];
+        // Create placeholder with just id (will render as empty matrix)
+        return { id, shape: [], data: [], name: id };
+      }
+      
+      const output = getOrPlaceholder(g.outputId);
+      const inputs = (g.inputIds || []).map(id => getOrPlaceholder(id));
       return { type: g.opType, inputs, output, meta: g.meta || {} };
     }
     
@@ -1313,57 +1326,37 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     
     // If skipLayout is set, just position groups using their saved coordinates
     if (skipLayout) {
-      const PAD = 20;
-      const LABEL_H = 24;
+      // Find minimum Y to calculate offset if needed (ensure content is below toolbar)
+      const MIN_Y = 80;  // Minimum Y to ensure content is visible below toolbar
+      let minLoadedY = Infinity;
+      groups.forEach(g => {
+        if (typeof g.y === 'number') minLoadedY = Math.min(minLoadedY, g.y);
+      });
+      const yOffset = (minLoadedY < MIN_Y && minLoadedY !== Infinity) ? (MIN_Y - minLoadedY) : 0;
       
       // Use saved positions - no layout calculation
       groups.forEach(g => {
         const el = groupElById[g.id];
         if (el) {
-          el.style.left = (g.x || 0) + 'px';
-          el.style.top = (g.y || 0) + 'px';
+          const xPos = typeof g.x === 'number' ? g.x : 0;
+          const yPos = (typeof g.y === 'number' ? g.y : 0) + yOffset;
+          el.style.left = xPos + 'px';
+          el.style.top = yPos + 'px';
+          // Update the group object with adjusted position
+          g.x = xPos;
+          g.y = yPos;
         }
       });
       
-      // Recompute box bounds (supports nested boxes)
-      function recomputeBoxBounds(box) {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        
-        // Include direct groups
-        (box.groupIds || []).forEach(gid => {
-          const g = groups.find(gr => gr.id === gid);
-          const el = groupElById[gid];
-          if (g && el) {
-            minX = Math.min(minX, g.x || 0);
-            minY = Math.min(minY, g.y || 0);
-            maxX = Math.max(maxX, (g.x || 0) + el.offsetWidth);
-            maxY = Math.max(maxY, (g.y || 0) + el.offsetHeight);
-          }
-        });
-        
-        // Include child boxes
-        (box.childBoxIds || []).forEach(bid => {
-          const childBox = boxes.find(b => b.id === bid);
-          if (childBox) {
-            if (childBox.w <= 0) recomputeBoxBounds(childBox);
-            if (childBox.w > 0) {
-              minX = Math.min(minX, childBox.x);
-              minY = Math.min(minY, childBox.y);
-              maxX = Math.max(maxX, childBox.x + childBox.w);
-              maxY = Math.max(maxY, childBox.y + childBox.h);
-            }
-          }
-        });
-        
-        if (minX < Infinity) {
-          box.x = minX - PAD;
-          box.y = minY - PAD - LABEL_H;
-          box.w = (maxX - minX) + 2 * PAD;
-          box.h = (maxY - minY) + 2 * PAD + LABEL_H;
-        }
-      }
+      // Boxes already have their x, y, w, h from JSON - apply same offset
+      boxes.forEach(box => {
+        if (typeof box.x !== 'number') box.x = 0;
+        if (typeof box.y !== 'number') box.y = 0;
+        else box.y = box.y + yOffset;  // Apply same offset
+        if (typeof box.w !== 'number' || box.w <= 0) box.w = 100;
+        if (typeof box.h !== 'number' || box.h <= 0) box.h = 100;
+      });
       
-      boxes.forEach(recomputeBoxBounds);
       skipLayout = false;  // Reset flag
     } else {
       // Create boxes from pending box() calls - this handles all layout
@@ -1622,6 +1615,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
 
   // ==================== Element-wise Hover Highlighting ====================
   // For operations where output[i,j] corresponds to input[i,j] (ReLU, activations, etc.)
+  // Handles NumPy broadcasting: 1D tensors broadcast as rows (1, N) or columns (N, 1)
   function setupElementwiseHover(inputCards, outputCard) {
     const outputTable = outputCard.querySelector('.matrix-table');
     if (!outputTable) return;
@@ -1629,21 +1623,35 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     const inputTables = inputCards.map(card => card.querySelector('.matrix-table')).filter(Boolean);
     if (inputTables.length === 0) return;
     
+    // Detect the shape of each input table (for broadcasting)
+    const inputShapes = inputTables.map(table => {
+      const rows = table.querySelectorAll('tr');
+      const numRows = rows.length;
+      const numCols = rows[0] ? rows[0].querySelectorAll('td[data-col]').length : 0;
+      return { rows: numRows, cols: numCols };
+    });
+    
     const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
     
     outputCells.forEach(cell => {
       cell.style.cursor = 'pointer';
       
       cell.addEventListener('mouseenter', () => {
-        const row = cell.dataset.row;
-        const col = cell.dataset.col;
+        const row = parseInt(cell.dataset.row);
+        const col = parseInt(cell.dataset.col);
         
         // Highlight the output cell
         cell.classList.add('highlight-cell');
         
-        // Highlight corresponding cells in all input matrices
-        inputTables.forEach(inputTable => {
-          const inputCell = inputTable.querySelector(`td[data-row="${row}"][data-col="${col}"]`);
+        // Highlight corresponding cells in all input matrices (with broadcasting)
+        inputTables.forEach((inputTable, idx) => {
+          const shape = inputShapes[idx];
+          // Handle broadcasting: if input has only 1 row, always use row 0
+          // If input has only 1 col, always use col 0
+          const targetRow = shape.rows === 1 ? 0 : row;
+          const targetCol = shape.cols === 1 ? 0 : col;
+          
+          const inputCell = inputTable.querySelector(`td[data-row="${targetRow}"][data-col="${targetCol}"]`);
           if (inputCell) {
             inputCell.classList.add('highlight-cell');
           }
@@ -1806,15 +1814,26 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   // ==================== Render Operation ====================
   function renderOp(container, op) {
     const { type, inputs, output, meta } = op;
-    const isElementwise = ['add', 'sub', 'mul', 'div'].includes(type) && inputs.length >= 2;
-    const isMatmul = type === 'matmul' && inputs.length >= 2;
-    const isLoss = ['mseloss', 'crossentropyloss', 'bceloss'].includes(type) && inputs.length >= 2;
-    const isLinear = type === 'linear' && inputs.length >= 2 && meta?.has_weight;
+    
+    // Safe helper to get tensor name with fallback
+    function getName(t, fallback = '?') {
+      if (!t) return fallback;
+      return t.name || t.id || fallback;
+    }
+    
+    // Ensure inputs is always an array
+    const safeInputs = inputs || [];
+    const safeOutput = output || { id: '?', name: type, shape: [], data: [] };
+    
+    const isElementwise = ['add', 'sub', 'mul', 'div'].includes(type) && safeInputs.length >= 2;
+    const isMatmul = type === 'matmul' && safeInputs.length >= 2;
+    const isLoss = ['mseloss', 'crossentropyloss', 'bceloss'].includes(type) && safeInputs.length >= 2;
+    const isLinear = type === 'linear' && safeInputs.length >= 2 && meta?.has_weight;
     
     // Determine output orientation for reduction operations
     let outputOrientation = 'auto';
-    if (['sum', 'mean', 'max'].includes(type) && inputs[0] && output.shape && output.shape.length === 1) {
-      const inputShape = inputs[0].shape || [];
+    if (['sum', 'mean', 'max'].includes(type) && safeInputs[0] && safeOutput.shape && safeOutput.shape.length === 1) {
+      const inputShape = safeInputs[0].shape || [];
       const axis = meta?.axis ?? meta?.arg0;
       
       if (inputShape.length >= 2) {
@@ -1831,13 +1850,25 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     // Get operator symbol for element-wise operations
     const opSymbols = { add: '+', sub: '−', mul: '×', div: '÷' };
     
-    if (isElementwise) {
+    if (isElementwise && safeInputs[0] && safeInputs[1]) {
       // Element-wise: inputs side by side, result below left input
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
       
+      // Determine orientation for 1D tensors based on NumPy broadcasting rules:
+      // A 1D tensor (N,) broadcasts as (1, N) - a ROW, not a column
+      // This affects how we display the second operand (typically bias)
+      const input0Shape = safeInputs[0].shape || [];
+      const input1Shape = safeInputs[1].shape || [];
+      
+      // If second input is 1D and first is 2D, display second as ROW (how NumPy broadcasts it)
+      let rightOrientation = 'auto';
+      if (input1Shape.length === 1 && input0Shape.length >= 2) {
+        rightOrientation = 'row';  // 1D broadcasts as row in NumPy
+      }
+      
       // First operand (top-left)
-      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0], 'auto', 'input');
+      const left = createMatrixCard(getName(safeInputs[0]), safeInputs[0], 'auto', 'input');
       left.classList.add('elem-left');
       wrapper.appendChild(left);
       
@@ -1847,13 +1878,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       opSym.textContent = opSymbols[type] || '+';
       wrapper.appendChild(opSym);
       
-      // Second operand (top-right)
-      const right = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1], 'auto', 'input');
+      // Second operand (top-right) - use row orientation for 1D bias
+      const right = createMatrixCard(getName(safeInputs[1]), safeInputs[1], rightOrientation, 'input');
       right.classList.add('elem-right');
       wrapper.appendChild(right);
       
       // Result (bottom-left, below first operand)
-      const result = createMatrixCard(output.name || type, output, outputOrientation, 'output');
+      const result = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'output');
       result.classList.add('elem-result');
       wrapper.appendChild(result);
       
@@ -1864,13 +1895,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       return;
     }
     
-    if (isLoss) {
+    if (isLoss && safeInputs[0] && safeInputs[1]) {
       // Loss functions: predictions | targets, loss below
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
       
       // Predictions (top-left)
-      const preds = createMatrixCard(inputs[0].name || 'predictions', inputs[0], 'auto', 'input');
+      const preds = createMatrixCard(getName(safeInputs[0], 'predictions'), safeInputs[0], 'auto', 'input');
       preds.classList.add('elem-left');
       wrapper.appendChild(preds);
       
@@ -1882,12 +1913,12 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       wrapper.appendChild(arrow);
       
       // Targets (top-right)
-      const targs = createMatrixCard(inputs[1].name || 'targets', inputs[1], 'auto', 'input');
+      const targs = createMatrixCard(getName(safeInputs[1], 'targets'), safeInputs[1], 'auto', 'input');
       targs.classList.add('elem-right');
       wrapper.appendChild(targs);
       
       // Loss value (bottom-left)
-      const lossCard = createMatrixCard(output.name || 'loss', output, 'auto', 'output');
+      const lossCard = createMatrixCard(getName(safeOutput, 'loss'), safeOutput, 'auto', 'output');
       lossCard.classList.add('elem-result');
       wrapper.appendChild(lossCard);
       
@@ -1898,40 +1929,38 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       return;
     }
     
-    if (isLinear) {
+    if (isLinear && safeInputs[0] && safeInputs[1]) {
       // Linear layer: show as matmul layout for W @ X.T
       // Instrumentation inserts weight at front: inputs[0] = weight, inputs[1] = x
-      const weight = inputs[0];
-      const x = inputs[1];
-      const bias = inputs.length > 2 ? inputs[2] : null;
+      const weight = safeInputs[0];
+      const x = safeInputs[1];
       
       // Create transposed version of x for visualization
       // The computation is (W @ x.T).T, so we show x.T on top
       const xT = {
-        ...x,
-        name: (x.name || 'X') + '.T',
-        shape: x.shape ? [...x.shape].reverse() : x.shape,
-        data: x.data
+        ...(x || {}),
+        name: getName(x, 'X') + '.T',
+        shape: x?.shape ? [...x.shape].reverse() : [],
+        data: x?.data || []
       };
       // Transpose the actual data for display
-      if (x.data && Array.isArray(x.data) && x.data.length > 0) {
+      if (x?.data && Array.isArray(x.data) && x.data.length > 0) {
         if (Array.isArray(x.data[0])) {
           xT.data = x.data[0].map((_, colIdx) => x.data.map(row => row[colIdx]));
         }
       }
       
       // Create transposed version of output for visualization
-      // The actual output is (4,16) but visually we show W @ X.T = (16,4)
       const outputT = {
-        ...output,
-        name: output.name || 'y',
-        shape: output.shape ? [...output.shape].reverse() : output.shape,
-        data: output.data
+        ...(safeOutput || {}),
+        name: getName(safeOutput, 'y'),
+        shape: safeOutput?.shape ? [...safeOutput.shape].reverse() : [],
+        data: safeOutput?.data || []
       };
       // Transpose the output data for display
-      if (output.data && Array.isArray(output.data) && output.data.length > 0) {
-        if (Array.isArray(output.data[0])) {
-          outputT.data = output.data[0].map((_, colIdx) => output.data.map(row => row[colIdx]));
+      if (safeOutput?.data && Array.isArray(safeOutput.data) && safeOutput.data.length > 0) {
+        if (Array.isArray(safeOutput.data[0])) {
+          outputT.data = safeOutput.data[0].map((_, colIdx) => safeOutput.data.map(row => row[colIdx]));
         }
       }
       
@@ -1965,20 +1994,20 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       return;
     }
     
-    if (isMatmul) {
+    if (isMatmul && safeInputs[0] && safeInputs[1]) {
       // Matrix multiplication: keep grid layout for proper alignment
-    const grid = document.createElement('div');
+      const grid = document.createElement('div');
       grid.className = 'layout-grid layout-binary';
     
-      const left = createMatrixCard(inputs[0].name || inputs[0].id, inputs[0], 'auto', 'left');
+      const left = createMatrixCard(getName(safeInputs[0]), safeInputs[0], 'auto', 'left');
       left.classList.add('pos-left');
       grid.appendChild(left);
       
-      const top = createMatrixCard(inputs[1].name || inputs[1].id, inputs[1], 'auto', 'top');
+      const top = createMatrixCard(getName(safeInputs[1]), safeInputs[1], 'auto', 'top');
       top.classList.add('pos-top');
       grid.appendChild(top);
       
-      const res = createMatrixCard(output.name || type, output, outputOrientation, 'result');
+      const res = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'result');
       res.classList.add('pos-result');
       grid.appendChild(res);
       
@@ -1995,6 +2024,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     
     // Helper to get display name for a tensor, falling back to producer's output name
     function getInputDisplayName(tensor) {
+      if (!tensor) return '?';
       if (tensor.name) return tensor.name;
       // Look for a group that produced this tensor
       const producerGroup = groups.find(g => g.outputId === tensor.id);
@@ -2012,13 +2042,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     }
     
     const inputCards = [];
-      if (inputs[0]) {
-      const inputLabel = getInputDisplayName(inputs[0]);
-      const inputCard = createMatrixCard(inputLabel, inputs[0], 'auto', 'input');
+    if (safeInputs[0]) {
+      const inputLabel = getInputDisplayName(safeInputs[0]);
+      const inputCard = createMatrixCard(inputLabel, safeInputs[0], 'auto', 'input');
       grid.appendChild(inputCard);
       inputCards.push(inputCard);
     }
-    const outputCard = createMatrixCard(output.name || type, output, outputOrientation, 'output');
+    const outputCard = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'output');
     grid.appendChild(outputCard);
     
     // Add hover highlighting based on operation type
@@ -2365,6 +2395,16 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         x: b.x, y: b.y, w: b.w, h: b.h, 
         fromCode: b.fromCode 
       })),
+      tensors: Object.fromEntries(
+        Object.entries(tensors)
+          .filter(([id, t]) => t != null)  // Skip null/undefined tensors
+          .map(([id, t]) => [id, {
+            id: t.id || id, 
+            shape: t.shape || [], 
+            data: t.data || [], 
+            name: t.name || null
+          }])
+      ),
       notes: canvasNotes.map(n => ({ id: n.id, x: n.x, y: n.y, text: n.text }))
     };
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
@@ -2385,17 +2425,31 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         // Restore code
         if (state.code) document.getElementById('code').value = state.code;
         
+        // Restore tensors (needed for rendering)
+        if (state.tensors && typeof state.tensors === 'object') {
+          // Clear and restore tensors
+          Object.keys(tensors).forEach(k => delete tensors[k]);
+          Object.entries(state.tensors).forEach(([id, t]) => {
+            if (t != null) {
+              tensors[id] = t;
+            }
+          });
+        }
+        
         // Restore groups
-        if (state.groups) {
+        if (state.groups && Array.isArray(state.groups)) {
           groups.length = 0;
           state.groups.forEach(g => groups.push(g));
+          const groupNums = groups.map(g => parseInt((g.id || '').replace('g', '')) || 0);
+          nextGroupId = groupNums.length > 0 ? Math.max(...groupNums) + 1 : 1;
         }
         
         // Restore boxes
-        if (state.boxes) {
+        if (state.boxes && Array.isArray(state.boxes)) {
           boxes.length = 0;
           state.boxes.forEach(b => boxes.push(b));
-          nextBoxId = Math.max(...boxes.map(b => parseInt(b.id.replace('b', '')) || 0), 0) + 1;
+          const boxNums = boxes.map(b => parseInt((b.id || '').replace('b', '')) || 0);
+          nextBoxId = boxNums.length > 0 ? Math.max(...boxNums) + 1 : 1;
         }
         
         // Restore notes
@@ -2407,13 +2461,38 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         // Set flag to preserve loaded positions
         skipLayout = true;
         
-        // Render without running code (data already loaded)
+        // If tensors weren't in the JSON (old format), warn user
+        if (!state.tensors || Object.keys(state.tensors).length === 0) {
+          alert('This JSON was saved in an old format without tensor data.\n\n' +
+                'The layout will be restored, but matrices will be empty.\n' +
+                'To get full data: Run code, then Export JSON again.');
+        }
+        
+        // Reset zoom to 100% for proper positioning (set before render so toolbar picks it up)
+        zoomLevel = 1;
+        
+        // Render without running code (data already loaded or using placeholders)
         render();
         
+        // After render, ensure zoom select shows correct value and scroll to top
+        setTimeout(() => {
+          const zoomSelect = document.querySelector('#toolbar select');
+          if (zoomSelect) zoomSelect.value = '100%';
+          applyZoom();
+          
+          const canvas = document.getElementById('canvas');
+          if (canvas) {
+            canvas.scrollTop = 0;
+            canvas.scrollLeft = 0;
+          }
+        }, 50);
+        
       } catch(err) { 
-        console.error(err);
+        console.error('JSON load error:', err);
         alert('Invalid JSON: ' + err.message); 
       }
+      // Reset file input so same file can be loaded again
+      e.target.value = '';
     };
     reader.readAsText(file);
   };

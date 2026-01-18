@@ -44,16 +44,25 @@ class Tracer:
         self.sink = sink
         self._next_tid = 1
         self._next_cid = 1
-        self._id_map: Dict[int, str] = {}   # id(obj)->tN
         self._names: Dict[str, str] = {}    # tN->name
 
     def _tid(self, obj: Any) -> str:
-        oid = id(obj)
-        tid = self._id_map.get(oid)
-        if tid is None:
-            tid = f"t{self._next_tid}"
-            self._next_tid += 1
-            self._id_map[oid] = tid
+        """
+        Get or assign a unique ID for a tensor-like object.
+        
+        We store the ID directly on the object to avoid issues with Python's
+        id() function, which can return the same value for different objects
+        if one is garbage collected and the other reuses its memory address.
+        """
+        # Check if we've already assigned an ID to this object
+        if hasattr(obj, '_tracer_id'):
+            return obj._tracer_id
+        
+        # Create new ID and store it on the object
+        tid = f"t{self._next_tid}"
+        self._next_tid += 1
+        obj._tracer_id = tid
+        
         return tid
 
     def _cid(self) -> str:

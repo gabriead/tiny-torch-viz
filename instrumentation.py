@@ -9,6 +9,7 @@ from tinytorch.core.tensor import Tensor
 from tinytorch.core.layers import Layer
 from tinytorch.core.activations import ReLU, Sigmoid, Tanh, GELU, Softmax, LogSoftmax
 from tinytorch.core.losses import MSELoss, CrossEntropyLoss
+from tinytorch.core.norms import RMSNorm
 
 
 class Instrumentor:
@@ -228,6 +229,35 @@ class Instrumentor:
             self.original_methods[f"{cls_name}.forward"] = original_forward
             setattr(loss_cls, "forward", make_wrapped(original_forward, cls_name))
 
+    def _wrap_norm(self, norm_cls):
+        """Wraps a normalization class's __call__ and forward methods.
+        
+        Unlike activations/layers, we DON'T suppress internal operations
+        so users can see all the component ops (square, mean, sqrt, etc.)
+        """
+        cls_name = norm_cls.__name__
+        instrumentor = self  # Capture reference for closure
+        
+        def make_wrapped(orig, name):
+            def wrapped(instance, x, *args, **kwargs):
+                # DON'T set _inside_layer - let all internal ops be traced
+                # This shows the full breakdown: x*x, mean, sqrt, divide, etc.
+                result = orig(instance, x, *args, **kwargs)
+                return result
+            return wrapped
+        
+        # Wrap __call__
+        if hasattr(norm_cls, '__call__'):
+            original_call = norm_cls.__call__
+            self.original_methods[f"{cls_name}.__call__"] = original_call
+            setattr(norm_cls, "__call__", make_wrapped(original_call, cls_name))
+        
+        # Wrap forward (so .forward() also gets traced)
+        if hasattr(norm_cls, 'forward'):
+            original_forward = norm_cls.forward
+            self.original_methods[f"{cls_name}.forward"] = original_forward
+            setattr(norm_cls, "forward", make_wrapped(original_forward, cls_name))
+
     def instrument(self):
         """Apply all hooks."""
         # Binary arithmetic operations (use dunder methods to avoid double-tracing)
@@ -245,6 +275,7 @@ class Instrumentor:
         self._wrap_tensor_unary_method("sum", "sum")
         self._wrap_tensor_unary_method("mean", "mean")
         self._wrap_tensor_unary_method("max", "max")
+        self._wrap_tensor_unary_method("sqrt", "sqrt")
 
         # Layers - Layer.__call__ handles Linear, Dropout, etc.
         self._wrap_layer_forward()
@@ -256,6 +287,10 @@ class Instrumentor:
         # Losses
         for loss_cls in [MSELoss, CrossEntropyLoss]:
             self._wrap_loss(loss_cls)
+        
+        # Normalization layers
+        for norm_cls in [RMSNorm]:
+            self._wrap_norm(norm_cls)
 
     def uninstrument(self):
         """Restore original methods."""
@@ -271,6 +306,7 @@ class Instrumentor:
             "LogSoftmax": LogSoftmax,
             "MSELoss": MSELoss,
             "CrossEntropyLoss": CrossEntropyLoss,
+            "RMSNorm": RMSNorm,
         }
         
         for name, original in self.original_methods.items():

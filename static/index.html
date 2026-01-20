@@ -2057,7 +2057,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       setupTransposeHover(inputCards[0], outputCard);
     } else {
       // Element-wise activations: output[i,j] corresponds to input[i,j]
-      const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax'].includes(type);
+      const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax', 'rmsnorm', 'sqrt'].includes(type);
       if (isElementwiseUnary && inputCards.length > 0) {
         setupElementwiseHover(inputCards, outputCard);
       }

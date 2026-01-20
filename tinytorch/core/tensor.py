@@ -702,6 +702,12 @@ class Tensor:
         return Tensor(result)
         ### END SOLUTION
 
+    def sqrt(self):
+        """Find square root along specified axis."""
+        result = np.sqrt(self.data)
+        return Tensor(result)
+
+
 # %% [markdown]
 """
 ### 🧪 Unit Test: Tensor Creation
@@ -1435,6 +1441,47 @@ if __name__ == "__main__":
     analyze_memory_layout()
 
 
+# %% nbgrader={"grade": true, "grade_id": "test-sqrt", "locked": true, "points": 10}
+def test_unit_sqrt():
+    """🧪 Test square root operation."""
+    print("🧪 Unit Test: Square Root...")
+
+    # Test perfect squares
+    t = Tensor([1, 4, 9, 16])
+    result = t.sqrt()
+    expected = np.array([1, 2, 3, 4], dtype=np.float32)
+    assert np.array_equal(result.data, expected)
+
+    # Test shape preservation (Matrix)
+    matrix = Tensor([[4, 9], [16, 25]])  # Shape (2, 2)
+    result_matrix = matrix.sqrt()
+    expected_matrix = np.array([[2, 3], [4, 5]], dtype=np.float32)
+
+    assert result_matrix.shape == (2, 2)
+    assert np.array_equal(result_matrix.data, expected_matrix)
+
+    # Test Zero (Critical for numerical stability checks)
+    z = Tensor([0.0])
+    assert z.sqrt().data[0] == 0.0
+
+    # Test non-perfect squares (float precision)
+    t2 = Tensor([2.0])
+    # sqrt(2) approx 1.41421356
+    assert np.allclose(t2.sqrt().data, np.array([1.41421356], dtype=np.float32))
+
+    # Test Domain Error (Negative numbers)
+    # NumPy returns NaN (Not a Number) for sqrt(-1), TinyTorch should pass this through
+    neg = Tensor([-1.0])
+    result_neg = neg.sqrt()
+    assert np.isnan(result_neg.data)[0], "Sqrt of negative should be NaN"
+
+    print("✅ Square root works correctly!")
+
+
+if __name__ == "__main__":
+    test_unit_sqrt()
+
+
 # %% [markdown]
 """
 ## 🔧 Integration: Bringing It Together
@@ -1519,6 +1566,7 @@ def test_module():
     test_unit_matrix_multiplication()
     test_unit_shape_manipulation()
     test_unit_reduction_operations()
+    test_unit_sqrt()
 
     print("\nRunning integration scenarios...")
 
@@ -1600,6 +1648,7 @@ def test_module():
 # Run comprehensive module test
 if __name__ == "__main__":
     test_module()
+
 
 
 # %% [markdown]

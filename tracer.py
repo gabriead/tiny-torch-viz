@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Sequence, List
+from typing import Any, Dict, Optional, Sequence, List, Set  # <-- Add Set
 import numpy as np
 
 
@@ -23,6 +23,7 @@ class QueueSink:
     Your app.py should have a background task reading this queue and sending
     each dict via ws.send_json(...).
     """
+
     def __init__(self, q):
         self.q = q
 
@@ -44,12 +45,13 @@ class Tracer:
         self.sink = sink
         self._next_tid = 1
         self._next_cid = 1
-        self._names: Dict[str, str] = {}    # tN->name
+        self._names: Dict[str, str] = {}  # tN->name
+        self._tensors_with_ops: Set[str] = set()  # NEW: Track tensors that have operations
 
     def _tid(self, obj: Any) -> str:
         """
         Get or assign a unique ID for a tensor-like object.
-        
+
         We store the ID directly on the object to avoid issues with Python's
         id() function, which can return the same value for different objects
         if one is garbage collected and the other reuses its memory address.
@@ -57,12 +59,12 @@ class Tracer:
         # Check if we've already assigned an ID to this object
         if hasattr(obj, '_tracer_id'):
             return obj._tracer_id
-        
+
         # Create new ID and store it on the object
         tid = f"t{self._next_tid}"
         self._next_tid += 1
         obj._tracer_id = tid
-        
+
         return tid
 
     def _cid(self) -> str:
@@ -114,6 +116,9 @@ class Tracer:
         in_ids: List[str] = [self.tensor(x) for x in inputs]
         out_id: str = self.tensor(output)
 
+        # NEW: Track that this tensor has an operation
+        self._tensors_with_ops.add(out_id)
+
         # Memory accounting
         def bytes_of(x: Any) -> int:
             if hasattr(x, "data"):
@@ -131,7 +136,7 @@ class Tracer:
         meta.setdefault("mem_in_bytes", int(sum(in_bytes_list)))
         meta.setdefault("mem_in_bytes_list", [int(b) for b in in_bytes_list])
         meta.setdefault("mem_out_bytes", int(out_bytes))
-        # simple conservative upper bound for “peak” if all inputs + output coexist
+        # simple conservative upper bound for "peak" if all inputs + output coexist
         meta.setdefault("mem_peak_bytes", int(sum(in_bytes_list) + out_bytes))
 
         self.sink.emit(
@@ -147,11 +152,11 @@ class Tracer:
         )
 
     def box(
-        self,
-        label: str,
-        tensors: Sequence[Any],
-        scheme: str = "1",
-        parent_box: Optional[str] = None,
+            self,
+            label: str,
+            tensors: Sequence[Any],
+            scheme: str = "1",
+            parent_box: Optional[str] = None,
     ) -> None:
         """
         Emits a 'box' event. The frontend expects:
@@ -164,9 +169,23 @@ class Tracer:
             # Skip layer objects (Sequential, Linear, etc.) - they're not tensors
             if hasattr(t, "data") and hasattr(t, "shape"):
                 # This is a tensor-like object
-                t_ids.append(self._tid(t))
-                # Ensure tensor node exists/upserted (shape, data, etc.)
-                self.tensor(t)
+                tid = self.tensor(t)  # This emits tensor data and returns ID
+                t_ids.append(tid)
+
+                # NEW: If this tensor doesn't already have an operation,
+                # create a fake "tensor" operation so it appears in the frontend
+                if tid not in self._tensors_with_ops:
+                    # Create a fake "tensor" operation (like numpy.array() or torch.tensor())
+                    self.op(
+                        op_type="tensor",
+                        inputs=[],  # No inputs for tensor creation
+                        output=t,
+                        meta={
+                            "label": label,
+                            "scheme": scheme,
+                            "is_fake": True  # Mark as fake for frontend if needed
+                        }
+                    )
             elif isinstance(t, (int, float, np.ndarray)):
                 # This is a scalar or numpy array - convert to const node
                 t_ids.append(self.tensor(t))

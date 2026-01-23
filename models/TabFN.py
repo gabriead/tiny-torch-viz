@@ -158,8 +158,8 @@ class TabPFNBlock:
 class TabPFN:
     def __init__(self,
                  n_features=100,
-                 d_model=256,
-                 n_heads=8,
+                 d_model=4,
+                 n_heads=1,
                  n_layers=12,
                  n_classes=2,
                  dropout=0.1):
@@ -238,8 +238,8 @@ class TabPFN:
 # ============================================
 
 # Create synthetic tabular data
-batch_size = 4
-n_features = 100
+batch_size = 1
+n_features = 4
 x_data = np.random.randn(batch_size, n_features, 1)
 
 # Create TabPFN model
@@ -253,7 +253,7 @@ print("TabPFN Model - Step by Step Visualization")
 print("=" * 80)
 
 # Step 1: Input Table
-#box("Input Table", x, "1")
+#box("Input Table", x, "3")
 print(f"Shape: {x.shape}")
 print()
 
@@ -284,10 +284,10 @@ print("-" * 40)
 block = tabpfn.blocks[0]
 
 # Multi-head attention weights
-#box("W_q (Attention)", block.W_q, "5a")
-#box("W_k (Attention)", block.W_k, "5b")
-#box("W_v (Attention)", block.W_v, "5c")
-#box("W_o (Attention)", block.W_o, "5d")
+#box("W_q (Attention)", block.W_q, "1")
+#box("W_k (Attention)", block.W_k, "2")
+#box("W_v (Attention)", block.W_v, "3")
+#box("W_o (Attention)", block.W_o, "4")
 
 # Attention computation
 Q = patterned.matmul(block.W_q.transpose())
@@ -344,7 +344,7 @@ features = x_norm2
 for i in range(1, tabpfn.n_layers):
     features = tabpfn.blocks[i].forward(features)
     if i < 3:  # Show first 3 blocks
-        #box(f"Block {i + 1} Output", features, f"13.{i}")
+ #       box(f"Block {i + 1} Output", features, f"13.{i}")
         print(features)
 
 # Step 7: Feature Pooling

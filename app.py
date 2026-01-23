@@ -109,6 +109,7 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
     Execution environment for user-authored Python snippets.
     Provides direct access to TinyTorch classes and tracer utilities.
     """
+    import builtins
 
     # Helper to allow users to manually box things
     def manual_box(label, tensors, scheme="1", parent=None):
@@ -123,91 +124,71 @@ def _make_exec_env(tracer: Tracer) -> Dict[str, Any]:
             tracer.name(value, name)
         return value
 
-    return {
-        "__builtins__": {
-            "__import__": __import__,
-            "print": print,
-            "range": range,
-            "len": len,
-            "min": min,
-            "max": max,
-            "sum": sum,
-            "abs": abs,
-            "list": list,
-            "tuple": tuple,
-            "dict": dict,
-            "set": set,
-            "zip": zip,
-            "enumerate": enumerate,
-            "map": map,
-            "filter": filter,
-            "sorted": sorted,
-            "reversed": reversed,
-            "int": int,
-            "float": float,
-            "str": str,
-            "bool": bool,
-            "type": type,
-            "isinstance": isinstance,
-            "hasattr": hasattr,
-            "getattr": getattr,
-            "setattr": setattr,
-            "True": True,
-            "False": False,
-            "None": None,
-        },
-        # Libraries
-        "np": np,
-        "numpy": np,
-        # TinyTorch Core
+    # Start with a clean slate but include essential builtins
+    env = {}
+
+    # Manually add critical builtins
+    env['__builtins__'] = builtins.__dict__
+    env['__build_class__'] = builtins.__build_class__
+    env['__name__'] = '__main__'
+    env['__doc__'] = None
+
+    # Add common builtins
+    for name in ['print', 'len', 'range', 'int', 'float', 'str', 'list', 'dict', 'tuple',
+                 'set', 'bool', 'type', 'isinstance', 'issubclass', 'super', 'object',
+                 'Exception', 'ValueError', 'TypeError', 'AttributeError', 'KeyError',
+                 'zip', 'enumerate', 'map', 'filter', 'sorted', 'reversed', 'abs',
+                 'min', 'max', 'sum', 'round', 'pow', 'divmod', 'hash', 'id']:
+        env[name] = getattr(builtins, name)
+
+    # Add modules
+    env['math'] = __import__('math')
+    env['np'] = np
+    env['numpy'] = np
+
+    # Add TinyTorch components
+    tiny_torch = {
         "Tensor": Tensor,
-        # Layers
         "Linear": Linear,
         "Dropout": Dropout,
         "Sequential": Sequential,
         "Layer": Layer,
-        # Activations
         "ReLU": ReLU,
         "Sigmoid": Sigmoid,
         "Tanh": Tanh,
         "GELU": GELU,
         "Softmax": Softmax,
         "LogSoftmax": LogSoftmax,
-        # Losses
         "MSELoss": MSELoss,
         "CrossEntropyLoss": CrossEntropyLoss,
         "log_softmax": log_softmax,
-        # Normalization
         "RMSNorm": RMSNorm,
-        # Autograd
         "Function": Function,
         "enable_autograd": enable_autograd,
-        # Optimizers
         "Optimizer": Optimizer,
         "SGD": SGD,
         "Adam": Adam,
         "AdamW": AdamW,
-        # Tokenization
         "Tokenizer": Tokenizer,
         "CharTokenizer": CharTokenizer,
         "BPETokenizer": BPETokenizer,
         "create_tokenizer": create_tokenizer,
         "tokenize_dataset": tokenize_dataset,
-        # Training
         "CosineSchedule": CosineSchedule,
         "clip_grad_norm": clip_grad_norm,
         "Trainer": Trainer,
-        # Embeddings
         "Embedding": Embedding,
         "PositionalEncoding": PositionalEncoding,
         "EmbeddingLayer": EmbeddingLayer,
         "create_sinusoidal_embeddings": create_sinusoidal_embeddings,
-        # Tracing utilities (exposed to user code)
         "tracer": tracer,
         "box": manual_box,
-        # Auto-naming helper (injected by code transformation)
         "__auto_name__": auto_name,
     }
+
+    env.update(tiny_torch)
+
+    return env
 
 
 class PrintCapture(io.StringIO):
@@ -227,9 +208,9 @@ class PrintCapture(io.StringIO):
 
 
 def _run_user_code(code: str, tracer: Tracer) -> None:
-    # 1. Transform code to auto-capture variable names
-    transformed_code = transform_code(code)
-    
+    # TEMPORARY: Skip transformation to debug
+    transformed_code = transform_code(code)  # Instead of transform_code(code)
+
     # 2. Setup Environment
     env = _make_exec_env(tracer)
 
@@ -241,7 +222,7 @@ def _run_user_code(code: str, tracer: Tracer) -> None:
     with Instrumentor(tracer):
         try:
             # 5. Execute transformed code
-            exec(transformed_code, env, env)
+            exec(transformed_code, env)
         except Exception:
             tracer.error(traceback.format_exc())
         finally:

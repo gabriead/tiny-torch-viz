@@ -1,0 +1,1457 @@
+{
+  "code": "import numpy\n# TabPFN toy example\n\n# training data\n\nX_train = Tensor([[1,2,3,4], [5,6,7,8]])\nY_train = Tensor([1, 0])\nX_test = Tensor([[9,10,11,12]])\nY_test = Tensor([0])\n\nbox(\"X_train\", [X_train, Y_train, X_test], \"1\")\n\n# Feature Encoder - Feature Embeddings\nW_enc = Tensor([[1,0.5], [0.5, 1], [0.3,0.7],[0.7, 0.3]])\nW_enc_transpose = W_enc.transpose()\nb_enc = Tensor([[0.1,0.2,0.3,0.4],[0.1,0.2,0.3,0.4],[0.1,0.2,0.3,0.4]])\n\nbox(\"Feature Encoder\", W_enc_transpose, \"2\")\n\n# Label Encoder - Label Embeddings\nW_y = Tensor([[1],[-1],[0],[0]]).reshape(1,4)\nb_y = Tensor([0,0,0,0])\n\ndef label_embeddings(y_train):\n    lbl_embds = np.zeros((3,4))\n    for (idx, row) in enumerate (y_train):\n        res = row.data*W_y.data\n        lbl_embds[idx] = res\n\n    return Tensor(lbl_embds)\n      \ny_stacked = Tensor(np.hstack((Y_train.data, Y_test.data)))\nlabel_embeds = label_embeddings(y_stacked)\n\nbox(\"label Encoder\", [W_y, label_embeds], \"3\")\n\n#Step 1: Combine Training and Test Samples\nX_combined = X_combined = Tensor(np.vstack([X_train.data, X_test.data]))\nbox(\"Training and Test Samples\", X_combined, \"4\")\n\n# Step 1: Tokenization - Group Features\n\ndef group(X):\n  groups = X.shape[0]*W_enc.shape[1]\n  X_encoded = np.zeros((3,2,4))\n  #print(X_encoded)\n  idx = 0\n  col = 0\n  for (group_idx, row) in enumerate(X.data):\n      rt_ptr = 0\n      for rt_ptr in range(0, len(row), 2):\n          group_window = Tensor(row[rt_ptr:rt_ptr+2])\n          group_matmul =    group_window.matmul(W_enc_transpose)+b_enc[group_idx]\n          if col == 0:\n             X_encoded[idx][0] = group_matmul.data\n             col =1\n          else:\n             X_encoded[idx][1] = group_matmul.data\n             col =0\n      idx+=1\n  X_encoded_tensor = Tensor(X_encoded)\n  return X_encoded_tensor\n\nX_encoded = group(X_combined)\nbox(\"X_encoded\", [X_encoded], \"4\")\n\n\n# Step 3: Add Thinking Tokens\nThinking_Tokens = Tensor([[[0 ,0 ,0 ,0],\n[0 ,0 ,0 ,0], \n[0 ,0 ,0 ,0]]])\n\n#box(\"Thinking Tokens\", Thinking_Tokens, \"4\")\n\n# Computing full model input\n\n\nlabels_reshaped = label_embeds.data.reshape(3, 1, 4)\ndata_rows = np.concatenate([X_encoded.data, labels_reshaped], axis=1)\nE_numpy = np.concatenate([Thinking_Tokens.data, data_rows], axis=0)\nE = Tensor(E_numpy)\n#print(E)\n\n# Create row positional embeddings\nP_col_pos_embeds = Tensor([[[0.1, 0.1, 0.1, 0.1], \n[0.2, 0.2, 0.2, 0.2], \n[0.3, 0.3, 0.3, 0.3]]])\n\n# Add positional embeddings\nE = E+P_col_pos_embeds\nbox(\"Positional Embedding\", E, \"9\")\n\n\n# Attention\nW_q = Tensor(np.diag([0.1, 0.2, 0.1, 0.2]))\nW_k = Tensor(np.diag([0.1, 0.1, 0.1, 0.1]))\nW_v = Tensor(np.diag([1, 1, 1, 1]))\n\nscaling_factor = np.sqrt(4)\n\n\n\nlabels = [E[1][2], E[2][2], E[2][2]]\n",
+  "groups": [
+    {
+      "id": "g1",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t1",
+      "meta": {
+        "label": "X_train",
+        "scheme": "1",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 32,
+        "mem_peak_bytes": 32
+      },
+      "x": 100,
+      "y": 144
+    },
+    {
+      "id": "g2",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t2",
+      "meta": {
+        "label": "X_train",
+        "scheme": "1",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 8,
+        "mem_peak_bytes": 8
+      },
+      "x": 100,
+      "y": 297
+    },
+    {
+      "id": "g3",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t3",
+      "meta": {
+        "label": "X_train",
+        "scheme": "1",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 16
+      },
+      "x": 401,
+      "y": 144
+    },
+    {
+      "id": "g4",
+      "opType": "transpose",
+      "inputIds": [
+        "t5"
+      ],
+      "outputId": "t6",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          32
+        ],
+        "mem_out_bytes": 32,
+        "mem_peak_bytes": 64
+      },
+      "x": 100,
+      "y": 534
+    },
+    {
+      "id": "g5",
+      "opType": "reshape",
+      "inputIds": [
+        "t8"
+      ],
+      "outputId": "t9",
+      "meta": {
+        "arg0": 1,
+        "arg1": 4,
+        "mem_in_bytes": 16,
+        "mem_in_bytes_list": [
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 32
+      },
+      "x": 100,
+      "y": 937
+    },
+    {
+      "id": "g6",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t12",
+      "meta": {
+        "label": "label Encoder",
+        "scheme": "3",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 48,
+        "mem_peak_bytes": 48
+      },
+      "x": 402,
+      "y": 937
+    },
+    {
+      "id": "g7",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t13",
+      "meta": {
+        "label": "Training and Test Samples",
+        "scheme": "4",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 48,
+        "mem_peak_bytes": 48
+      },
+      "x": 100,
+      "y": 1312
+    },
+    {
+      "id": "g8",
+      "opType": "matmul",
+      "inputIds": [
+        "t14",
+        "t6"
+      ],
+      "outputId": "t15",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 80,
+      "y": 2259
+    },
+    {
+      "id": "g9",
+      "opType": "add",
+      "inputIds": [
+        "t15",
+        "t16"
+      ],
+      "outputId": "t17",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 80,
+      "y": 2598
+    },
+    {
+      "id": "g10",
+      "opType": "matmul",
+      "inputIds": [
+        "t18",
+        "t6"
+      ],
+      "outputId": "t19",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 80,
+      "y": 2995
+    },
+    {
+      "id": "g11",
+      "opType": "add",
+      "inputIds": [
+        "t19",
+        "t20"
+      ],
+      "outputId": "t21",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 80,
+      "y": 3334
+    },
+    {
+      "id": "g12",
+      "opType": "matmul",
+      "inputIds": [
+        "t22",
+        "t6"
+      ],
+      "outputId": "t23",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 80,
+      "y": 3731
+    },
+    {
+      "id": "g13",
+      "opType": "add",
+      "inputIds": [
+        "t23",
+        "t24"
+      ],
+      "outputId": "t25",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 80,
+      "y": 4070
+    },
+    {
+      "id": "g14",
+      "opType": "matmul",
+      "inputIds": [
+        "t26",
+        "t6"
+      ],
+      "outputId": "t27",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 572,
+      "y": 2259
+    },
+    {
+      "id": "g15",
+      "opType": "add",
+      "inputIds": [
+        "t27",
+        "t28"
+      ],
+      "outputId": "t29",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 572,
+      "y": 2598
+    },
+    {
+      "id": "g16",
+      "opType": "matmul",
+      "inputIds": [
+        "t30",
+        "t6"
+      ],
+      "outputId": "t31",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 572,
+      "y": 2995
+    },
+    {
+      "id": "g17",
+      "opType": "add",
+      "inputIds": [
+        "t31",
+        "t32"
+      ],
+      "outputId": "t33",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 572,
+      "y": 3334
+    },
+    {
+      "id": "g18",
+      "opType": "matmul",
+      "inputIds": [
+        "t34",
+        "t6"
+      ],
+      "outputId": "t35",
+      "meta": {
+        "mem_in_bytes": 40,
+        "mem_in_bytes_list": [
+          8,
+          32
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 56
+      },
+      "x": 572,
+      "y": 3731
+    },
+    {
+      "id": "g19",
+      "opType": "add",
+      "inputIds": [
+        "t35",
+        "t36"
+      ],
+      "outputId": "t37",
+      "meta": {
+        "mem_in_bytes": 32,
+        "mem_in_bytes_list": [
+          16,
+          16
+        ],
+        "mem_out_bytes": 16,
+        "mem_peak_bytes": 48
+      },
+      "x": 572,
+      "y": 4070
+    },
+    {
+      "id": "g20",
+      "opType": "tensor",
+      "inputIds": [],
+      "outputId": "t38",
+      "meta": {
+        "label": "X_encoded",
+        "scheme": "4",
+        "is_fake": true,
+        "mem_in_bytes": 0,
+        "mem_in_bytes_list": [],
+        "mem_out_bytes": 96,
+        "mem_peak_bytes": 96
+      },
+      "x": 100,
+      "y": 1577
+    },
+    {
+      "id": "g21",
+      "opType": "add",
+      "inputIds": [
+        "t40",
+        "t41"
+      ],
+      "outputId": "t42",
+      "meta": {
+        "mem_in_bytes": 240,
+        "mem_in_bytes_list": [
+          192,
+          48
+        ],
+        "mem_out_bytes": 192,
+        "mem_peak_bytes": 432
+      },
+      "x": 100,
+      "y": 1842
+    }
+  ],
+  "boxes": [
+    {
+      "id": "b1",
+      "label": "X_train",
+      "scheme": "1",
+      "groupIds": [
+        "g1",
+        "g2",
+        "g3"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 100,
+      "w": 627,
+      "h": 340,
+      "fromCode": true
+    },
+    {
+      "id": "b2",
+      "label": "Feature Encoder",
+      "scheme": "2",
+      "groupIds": [
+        "g4"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 490,
+      "w": 342,
+      "h": 353,
+      "fromCode": true
+    },
+    {
+      "id": "b3",
+      "label": "label Encoder",
+      "scheme": "3",
+      "groupIds": [
+        "g5",
+        "g6"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 893,
+      "w": 616,
+      "h": 325,
+      "fromCode": true
+    },
+    {
+      "id": "b4",
+      "label": "Training and Test Samples",
+      "scheme": "4",
+      "groupIds": [
+        "g7"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 1268,
+      "w": 326,
+      "h": 215,
+      "fromCode": true
+    },
+    {
+      "id": "b5",
+      "label": "X_encoded",
+      "scheme": "4",
+      "groupIds": [
+        "g20"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 1533,
+      "w": 211,
+      "h": 215,
+      "fromCode": true
+    },
+    {
+      "id": "b6",
+      "label": "Positional Embedding",
+      "scheme": "9",
+      "groupIds": [
+        "g21"
+      ],
+      "childBoxIds": [],
+      "x": 80,
+      "y": 1798,
+      "w": 507,
+      "h": 411,
+      "fromCode": true
+    }
+  ],
+  "tensors": {
+    "t1": {
+      "id": "t1",
+      "shape": [
+        2,
+        4
+      ],
+      "data": [
+        [
+          1,
+          2,
+          3,
+          4
+        ],
+        [
+          5,
+          6,
+          7,
+          8
+        ]
+      ],
+      "name": "X_train"
+    },
+    "t2": {
+      "id": "t2",
+      "shape": [
+        2
+      ],
+      "data": [
+        1,
+        0
+      ],
+      "name": "Y_train"
+    },
+    "t3": {
+      "id": "t3",
+      "shape": [
+        1,
+        4
+      ],
+      "data": [
+        [
+          9,
+          10,
+          11,
+          12
+        ]
+      ],
+      "name": "X_test"
+    },
+    "t4": {
+      "id": "t4",
+      "shape": [
+        1
+      ],
+      "data": [
+        0
+      ],
+      "name": "Y_test"
+    },
+    "t5": {
+      "id": "t5",
+      "shape": [
+        4,
+        2
+      ],
+      "data": [
+        [
+          1,
+          0.5
+        ],
+        [
+          0.5,
+          1
+        ],
+        [
+          0.30000001192092896,
+          0.699999988079071
+        ],
+        [
+          0.699999988079071,
+          0.30000001192092896
+        ]
+      ],
+      "name": "W_enc"
+    },
+    "t6": {
+      "id": "t6",
+      "shape": [
+        2,
+        4
+      ],
+      "data": [
+        [
+          1,
+          0.5,
+          0.30000001192092896,
+          0.699999988079071
+        ],
+        [
+          0.5,
+          1,
+          0.699999988079071,
+          0.30000001192092896
+        ]
+      ],
+      "name": "W_enc_transpose"
+    },
+    "t7": {
+      "id": "t7",
+      "shape": [
+        3,
+        4
+      ],
+      "data": [
+        [
+          0.10000000149011612,
+          0.20000000298023224,
+          0.30000001192092896,
+          0.4000000059604645
+        ],
+        [
+          0.10000000149011612,
+          0.20000000298023224,
+          0.30000001192092896,
+          0.4000000059604645
+        ],
+        [
+          0.10000000149011612,
+          0.20000000298023224,
+          0.30000001192092896,
+          0.4000000059604645
+        ]
+      ],
+      "name": "b_enc"
+    },
+    "t8": {
+      "id": "t8",
+      "shape": [
+        4,
+        1
+      ],
+      "data": [
+        [
+          1
+        ],
+        [
+          -1
+        ],
+        [
+          0
+        ],
+        [
+          0
+        ]
+      ],
+      "name": null
+    },
+    "t9": {
+      "id": "t9",
+      "shape": [
+        1,
+        4
+      ],
+      "data": [
+        [
+          1,
+          -1,
+          0,
+          0
+        ]
+      ],
+      "name": "W_y"
+    },
+    "t10": {
+      "id": "t10",
+      "shape": [
+        4
+      ],
+      "data": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "name": "b_y"
+    },
+    "t11": {
+      "id": "t11",
+      "shape": [
+        3
+      ],
+      "data": [
+        1,
+        0,
+        0
+      ],
+      "name": "y_stacked"
+    },
+    "t12": {
+      "id": "t12",
+      "shape": [
+        3,
+        4
+      ],
+      "data": [
+        [
+          1,
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "name": "label_embeds"
+    },
+    "t13": {
+      "id": "t13",
+      "shape": [
+        3,
+        4
+      ],
+      "data": [
+        [
+          1,
+          2,
+          3,
+          4
+        ],
+        [
+          5,
+          6,
+          7,
+          8
+        ],
+        [
+          9,
+          10,
+          11,
+          12
+        ]
+      ],
+      "name": null
+    },
+    "t14": {
+      "id": "t14",
+      "shape": [
+        2
+      ],
+      "data": [
+        1,
+        2
+      ],
+      "name": "group_window"
+    },
+    "t15": {
+      "id": "t15",
+      "shape": [
+        4
+      ],
+      "data": [
+        2,
+        2.5,
+        1.7000000476837158,
+        1.2999999523162842
+      ],
+      "name": null
+    },
+    "t16": {
+      "id": "t16",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t17": {
+      "id": "t17",
+      "shape": [
+        4
+      ],
+      "data": [
+        2.0999999046325684,
+        2.700000047683716,
+        2,
+        1.6999999284744263
+      ],
+      "name": "group_matmul"
+    },
+    "t18": {
+      "id": "t18",
+      "shape": [
+        2
+      ],
+      "data": [
+        3,
+        4
+      ],
+      "name": "group_window"
+    },
+    "t19": {
+      "id": "t19",
+      "shape": [
+        4
+      ],
+      "data": [
+        5,
+        5.5,
+        3.700000047683716,
+        3.299999952316284
+      ],
+      "name": null
+    },
+    "t20": {
+      "id": "t20",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t21": {
+      "id": "t21",
+      "shape": [
+        4
+      ],
+      "data": [
+        5.099999904632568,
+        5.699999809265137,
+        4,
+        3.700000047683716
+      ],
+      "name": "group_matmul"
+    },
+    "t22": {
+      "id": "t22",
+      "shape": [
+        2
+      ],
+      "data": [
+        5,
+        6
+      ],
+      "name": "group_window"
+    },
+    "t23": {
+      "id": "t23",
+      "shape": [
+        4
+      ],
+      "data": [
+        8,
+        8.5,
+        5.699999809265137,
+        5.300000190734863
+      ],
+      "name": null
+    },
+    "t24": {
+      "id": "t24",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t25": {
+      "id": "t25",
+      "shape": [
+        4
+      ],
+      "data": [
+        8.100000381469727,
+        8.699999809265137,
+        6,
+        5.700000286102295
+      ],
+      "name": "group_matmul"
+    },
+    "t26": {
+      "id": "t26",
+      "shape": [
+        2
+      ],
+      "data": [
+        7,
+        8
+      ],
+      "name": "group_window"
+    },
+    "t27": {
+      "id": "t27",
+      "shape": [
+        4
+      ],
+      "data": [
+        11,
+        11.5,
+        7.699999809265137,
+        7.300000190734863
+      ],
+      "name": null
+    },
+    "t28": {
+      "id": "t28",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t29": {
+      "id": "t29",
+      "shape": [
+        4
+      ],
+      "data": [
+        11.100000381469727,
+        11.699999809265137,
+        8,
+        7.700000286102295
+      ],
+      "name": "group_matmul"
+    },
+    "t30": {
+      "id": "t30",
+      "shape": [
+        2
+      ],
+      "data": [
+        9,
+        10
+      ],
+      "name": "group_window"
+    },
+    "t31": {
+      "id": "t31",
+      "shape": [
+        4
+      ],
+      "data": [
+        14,
+        14.5,
+        9.699999809265137,
+        9.299999237060547
+      ],
+      "name": null
+    },
+    "t32": {
+      "id": "t32",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t33": {
+      "id": "t33",
+      "shape": [
+        4
+      ],
+      "data": [
+        14.100000381469727,
+        14.699999809265137,
+        10,
+        9.69999885559082
+      ],
+      "name": "group_matmul"
+    },
+    "t34": {
+      "id": "t34",
+      "shape": [
+        2
+      ],
+      "data": [
+        11,
+        12
+      ],
+      "name": "group_window"
+    },
+    "t35": {
+      "id": "t35",
+      "shape": [
+        4
+      ],
+      "data": [
+        17,
+        17.5,
+        11.699999809265137,
+        11.300000190734863
+      ],
+      "name": null
+    },
+    "t36": {
+      "id": "t36",
+      "shape": [
+        4
+      ],
+      "data": [
+        0.10000000149011612,
+        0.20000000298023224,
+        0.30000001192092896,
+        0.4000000059604645
+      ],
+      "name": null
+    },
+    "t37": {
+      "id": "t37",
+      "shape": [
+        4
+      ],
+      "data": [
+        17.100000381469727,
+        17.700000762939453,
+        12,
+        11.699999809265137
+      ],
+      "name": "group_matmul"
+    },
+    "t38": {
+      "id": "t38",
+      "shape": [
+        3,
+        2,
+        4
+      ],
+      "data": [
+        [
+          [
+            2.0999999046325684,
+            2.700000047683716,
+            2,
+            1.6999999284744263
+          ],
+          [
+            5.099999904632568,
+            5.699999809265137,
+            4,
+            3.700000047683716
+          ]
+        ],
+        [
+          [
+            8.100000381469727,
+            8.699999809265137,
+            6,
+            5.700000286102295
+          ],
+          [
+            11.100000381469727,
+            11.699999809265137,
+            8,
+            7.700000286102295
+          ]
+        ],
+        [
+          [
+            14.100000381469727,
+            14.699999809265137,
+            10,
+            9.69999885559082
+          ],
+          [
+            17.100000381469727,
+            17.700000762939453,
+            12,
+            11.699999809265137
+          ]
+        ]
+      ],
+      "name": "X_encoded"
+    },
+    "t39": {
+      "id": "t39",
+      "shape": [
+        1,
+        3,
+        4
+      ],
+      "data": [
+        [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      ],
+      "name": "Thinking_Tokens"
+    },
+    "t40": {
+      "id": "t40",
+      "shape": [
+        4,
+        3,
+        4
+      ],
+      "data": [
+        [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            2.0999999046325684,
+            2.700000047683716,
+            2,
+            1.6999999284744263
+          ],
+          [
+            5.099999904632568,
+            5.699999809265137,
+            4,
+            3.700000047683716
+          ],
+          [
+            1,
+            -1,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            8.100000381469727,
+            8.699999809265137,
+            6,
+            5.700000286102295
+          ],
+          [
+            11.100000381469727,
+            11.699999809265137,
+            8,
+            7.700000286102295
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ],
+        [
+          [
+            14.100000381469727,
+            14.699999809265137,
+            10,
+            9.69999885559082
+          ],
+          [
+            17.100000381469727,
+            17.700000762939453,
+            12,
+            11.699999809265137
+          ],
+          [
+            0,
+            0,
+            0,
+            0
+          ]
+        ]
+      ],
+      "name": "E"
+    },
+    "t41": {
+      "id": "t41",
+      "shape": [
+        1,
+        3,
+        4
+      ],
+      "data": [
+        [
+          [
+            0.10000000149011612,
+            0.10000000149011612,
+            0.10000000149011612,
+            0.10000000149011612
+          ],
+          [
+            0.20000000298023224,
+            0.20000000298023224,
+            0.20000000298023224,
+            0.20000000298023224
+          ],
+          [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        ]
+      ],
+      "name": "P_col_pos_embeds"
+    },
+    "t42": {
+      "id": "t42",
+      "shape": [
+        4,
+        3,
+        4
+      ],
+      "data": [
+        [
+          [
+            0.10000000149011612,
+            0.10000000149011612,
+            0.10000000149011612,
+            0.10000000149011612
+          ],
+          [
+            0.20000000298023224,
+            0.20000000298023224,
+            0.20000000298023224,
+            0.20000000298023224
+          ],
+          [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        ],
+        [
+          [
+            2.1999998092651367,
+            2.799999952316284,
+            2.0999999046325684,
+            1.7999999523162842
+          ],
+          [
+            5.299999713897705,
+            5.899999618530273,
+            4.199999809265137,
+            3.9000000953674316
+          ],
+          [
+            1.2999999523162842,
+            -0.699999988079071,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        ],
+        [
+          [
+            8.200000762939453,
+            8.800000190734863,
+            6.099999904632568,
+            5.800000190734863
+          ],
+          [
+            11.300000190734863,
+            11.899999618530273,
+            8.199999809265137,
+            7.900000095367432
+          ],
+          [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        ],
+        [
+          [
+            14.200000762939453,
+            14.800000190734863,
+            10.100000381469727,
+            9.799999237060547
+          ],
+          [
+            17.30000114440918,
+            17.900001525878906,
+            12.199999809265137,
+            11.899999618530273
+          ],
+          [
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896,
+            0.30000001192092896
+          ]
+        ]
+      ],
+      "name": "E"
+    },
+    "t43": {
+      "id": "t43",
+      "shape": [
+        4,
+        4
+      ],
+      "data": [
+        [
+          0.10000000149011612,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0.20000000298023224,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0.10000000149011612,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0.20000000298023224
+        ]
+      ],
+      "name": "W_q"
+    },
+    "t44": {
+      "id": "t44",
+      "shape": [
+        4,
+        4
+      ],
+      "data": [
+        [
+          0.10000000149011612,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0.10000000149011612,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0.10000000149011612,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0.10000000149011612
+        ]
+      ],
+      "name": "W_k"
+    },
+    "t45": {
+      "id": "t45",
+      "shape": [
+        4,
+        4
+      ],
+      "data": [
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1
+        ]
+      ],
+      "name": "W_v"
+    }
+  },
+  "notes": [
+    {
+      "id": "n1769356043517",
+      "x": 485,
+      "y": 480,
+      "text": "Row,Col 0 (Feat Grp 1),Col 1 (Feat Grp 2),Col 2 (Label)\n1 (Think),\"[0.0, 0.0, 0.0, 0.0]\",\"[0.0, 0.0, 0.0, 0.0]\",\"[0.0, 0.0, 0.0, 0.0]\"\n2 (Train1),\"[2.1, 2.7, 2.0, 1.7]\",\"[5.1, 5.7, 4.0, 3.7]\",\"[1.0, -1.0, 0.0, 0.0]\"\n3 (Train2),\"[8.1, 8.7, 6.0, 5.7]\",\"[11.1, 11.7, 8.0, 7.7]\",\"[0.0, 0.0, 0.0, 0.0]\"\n4 (Test),\"[14.1, 14.7, 10.0, 9.7]\",\"[17.1, 17.7, 12.0, 11.7]\",\"[0.0, 0.0, 0.0, 0.0]\""
+    }
+  ]
+}

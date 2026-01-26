@@ -707,6 +707,8 @@ class Tensor:
         result = np.sqrt(self.data)
         return Tensor(result)
 
+    def repeat(self):
+        pass
 
 # %% [markdown]
 """

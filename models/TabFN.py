@@ -253,26 +253,26 @@ print("TabPFN Model - Step by Step Visualization")
 print("=" * 80)
 
 # Step 1: Input Table
-#box("Input Table", x, "3")
+box("Input Table", x, "3")
 print(f"Shape: {x.shape}")
 print()
 
 # Step 2: Feature Embedding
 embedded = x.matmul(tabpfn.W_embed.transpose()) + tabpfn.b_embed
-#box("Feature Embedding", embedded, "2")
+box("Feature Embedding", embedded, "2")
 print(f"Shape: {embedded.shape}")
 print(f"W_embed shape: {tabpfn.W_embed.shape}")
 print()
 
 # Step 3: Positional Encoding
 pos_encoded = embedded + tabpfn.pos_encoding
-#box("+ Positional Encoding", pos_encoded, "3")
+box("+ Positional Encoding", pos_encoded, "3")
 print(f"Pos encoding shape: {tabpfn.pos_encoding.shape}")
 print()
 
 # Step 4: Learnable Patterns (TabPFN Innovation)
 patterned = pos_encoded * tabpfn.patterns
-#box("× Learnable Patterns", patterned, "4")
+box("× Learnable Patterns", patterned, "4")
 print(f"Patterns shape: {tabpfn.patterns.shape}")
 print()
 
@@ -284,19 +284,19 @@ print("-" * 40)
 block = tabpfn.blocks[0]
 
 # Multi-head attention weights
-#box("W_q (Attention)", block.W_q, "1")
-#box("W_k (Attention)", block.W_k, "2")
-#box("W_v (Attention)", block.W_v, "3")
-#box("W_o (Attention)", block.W_o, "4")
+box("W_q (Attention)", block.W_q, "1")
+box("W_k (Attention)", block.W_k, "2")
+box("W_v (Attention)", block.W_v, "3")
+box("W_o (Attention)", block.W_o, "4")
 
 # Attention computation
 Q = patterned.matmul(block.W_q.transpose())
 K = patterned.matmul(block.W_k.transpose())
 V = patterned.matmul(block.W_v.transpose())
 
-#box("Q (Query)", Q, "6a")
-#box("K (Key)", K, "6b")
-#box("V (Value)", V, "6c")
+box("Q (Query)", Q, "4")
+box("K (Key)", K, "5")
+box("V (Value)", V, "6")
 
 # Reshape for multi-head
 batch_size, seq_len, d_model = Q.shape
@@ -317,15 +317,15 @@ attn_output = attention_weights.matmul(V_reshaped)
 attn_output_reshaped = attn_output.transpose(1, 2).reshape(batch_size, seq_len, d_model)
 attn_final = attn_output_reshaped.matmul(block.W_o.transpose())
 
-#box("Attention Output", attn_final, "7")
+box("Attention Output", attn_final, "7")
 
 # Skip connection and layer norm
 residual = patterned
 x_after_attn = residual + attn_final
 x_norm1 = layer_norm(x_after_attn, block.gamma1, block.beta1)
 
-#box("After Attention + Skip", x_after_attn, "8")
-#box("After Layer Norm", x_norm1, "9")
+box("After Attention + Skip", x_after_attn, "8")
+box("After Layer Norm", x_norm1, "9")
 
 # Feed-forward network
 ff_output = feed_forward_network(x_norm1, block.W_ffn1, block.b_ffn1, block.W_ffn2, block.b_ffn2)
@@ -335,26 +335,26 @@ residual2 = x_norm1
 x_after_ffn = residual2 + ff_output
 x_norm2 = layer_norm(x_after_ffn, block.gamma2, block.beta2)
 
-#box("FFN Output", ff_output, "10")
-#box("After FFN + Skip", x_after_ffn, "11")
-#box("Final Block Output", x_norm2, "12")
+box("FFN Output", ff_output, "5")
+box("After FFN + Skip", x_after_ffn, "6")
+box("Final Block Output", x_norm2, "7")
 
 # Step 6: Through all transformer blocks (simplified)
 features = x_norm2
 for i in range(1, tabpfn.n_layers):
     features = tabpfn.blocks[i].forward(features)
     if i < 3:  # Show first 3 blocks
- #       box(f"Block {i + 1} Output", features, f"13.{i}")
+        box(f"Block {i + 1} Output", features, f"13.{i}")
         print(features)
 
 # Step 7: Feature Pooling
 pooled = features.mean(axis=1)
-#box("Feature Pooling (Mean)", pooled, "14")
+box("Feature Pooling (Mean)", pooled, "8")
 print(f"Shape after pooling: {pooled.shape}")
 
 # Step 8: Output Projection
 output = pooled.matmul(tabpfn.W_out.transpose()) + tabpfn.b_out
-#box("Final Output", output, "15")
+box("Final Output", output, "9")
 print(f"Output shape: {output.shape}")
 print(f"Number of classes: {tabpfn.n_classes}")
 

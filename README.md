@@ -23,6 +23,8 @@ Based on [TinyTorch](https://mlsysbook.ai/tinytorch/intro.html) and the educatio
 ### Or run locally:
 ```bash
 cd /path/to/TinyTorch
+uv sync
+source .venv/bin/activate
 uv run uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 

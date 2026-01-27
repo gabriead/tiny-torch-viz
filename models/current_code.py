@@ -47,6 +47,7 @@ def group(X):
             else:
                 X_encoded[idx][1] = group_matmul.data + + E_feat.data[1]
                 col = 0
+            box("grouping", [group_window, group_matmul])
         idx += 1
     X_encoded_tensor = Tensor(X_encoded)
     return X_encoded_tensor
@@ -68,6 +69,7 @@ def label_embeddings(y_train):
     for (idx, row) in enumerate(y_train.data):
         res = Tensor((row)).matmul(W_y)
         lbl_embds[idx] = res.data
+        box("test", [res], "5")
 
     return Tensor(lbl_embds)
 
@@ -138,15 +140,17 @@ def column_attention_inplace(E: Tensor):
         A = softmax.forward(scores, dim=-1)  # (3,3)
         O = A.matmul(V)  # (3,4)
 
+        box("test", [Q, K, V, scores, A, O], "5")
+
         # In-place residual update of ALL tokens
         E.data[s] = E.data[s] + O.data
 
 
 column_attention_inplace(E)
-box("Updated Logits", E, "5")
+box("Updated Logits", E + 0, "5")
 
 
-def row_attention_inplace(E: Tensor, W_q: Tensor, W_k: Tensor, W_v: Tensor, single_eval_pos: int):
+def row_attention_inplace(E: Tensor, single_eval_pos: int):
     """
     In-place row attention:
       For each token slot t:
@@ -175,4 +179,5 @@ def row_attention_inplace(E: Tensor, W_q: Tensor, W_k: Tensor, W_v: Tensor, sing
         O = A.matmul(V)  # (S, D)
 
         # In-place residual update for this token slot
+        box("test", [Q, K, V, scores, A, O], "5")
         E.data[:, t, :] = E.data[:, t, :] + O.data

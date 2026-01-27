@@ -2,7 +2,7 @@ name: Deploy Docs V2
 
 on:
   push:
-    branches: [main]
+    branches: [tabPFN]
   workflow_dispatch:
 
 permissions:

@@ -46,8 +46,8 @@ def group(X):
             # group 2
             else:
                 X_encoded[idx][1] = group_matmul.data + + E_feat.data[1]
-                col = 0
-            box("grouping", [group_window, group_matmul])
+                col = 0a
+            box(f"grouping: group {col}", [group_window, group_matmul])
         idx += 1
     X_encoded_tensor = Tensor(X_encoded)
     return X_encoded_tensor

@@ -46,7 +46,7 @@ def group(X):
             # group 2
             else:
                 X_encoded[idx][1] = group_matmul.data + + E_feat.data[1]
-                col = 0a
+                col = 0
             box(f"grouping: group {col}", [group_window, group_matmul])
         idx += 1
     X_encoded_tensor = Tensor(X_encoded)
@@ -69,7 +69,7 @@ def label_embeddings(y_train):
     for (idx, row) in enumerate(y_train.data):
         res = Tensor((row)).matmul(W_y)
         lbl_embds[idx] = res.data
-        box("test", [res], "5")
+        box("Label Embeddings", [res], "5")
 
     return Tensor(lbl_embds)
 
@@ -118,6 +118,18 @@ scaling_factor = np.sqrt(4)
 col_att_softmax = Softmax()
 
 
+def layer_norm_inplace(E: Tensor, eps=1e-5):
+    """
+    In-place LN over last dim D for every vector in E.
+    E: (S, Ttok, D)
+    """
+    x = E.data
+    mean = x.mean(axis=-1, keepdims=True)
+    var = ((x - mean) * (x - mean)).mean(axis=-1, keepdims=True)
+    x_norm = (x - mean) / np.sqrt(var + eps)
+    box("Layer norn", [Tensor(x), Tensor(mean), Tensor(var), Tensor(x_norm)], "7")
+    E.data[:] = x_norm
+
 def column_attention_inplace(E: Tensor):
     """
     In-place column attention:
@@ -140,14 +152,27 @@ def column_attention_inplace(E: Tensor):
         A = softmax.forward(scores, dim=-1)  # (3,3)
         O = A.matmul(V)  # (3,4)
 
-        box("test", [Q, K, V, scores, A, O], "5")
+        box("column_attention", [Q, K, V, scores, A, O], "5")
 
         # In-place residual update of ALL tokens
         E.data[s] = E.data[s] + O.data
 
 
 column_attention_inplace(E)
+layer_norm_inplace(E)
 box("Updated Logits", E + 0, "5")
+
+def mlp_inplace(E: Tensor):
+    """
+    Minimal hand-friendly MLP with residual:
+      x <- x + GELU(x)
+    In-place.
+    """
+    gelu = GELU()
+    x = Tensor(E.data.copy())
+    gx = gelu.forward(x).data
+    E.data[:] = E.data + gx
+
 
 
 def row_attention_inplace(E: Tensor, single_eval_pos: int):
@@ -179,5 +204,42 @@ def row_attention_inplace(E: Tensor, single_eval_pos: int):
         O = A.matmul(V)  # (S, D)
 
         # In-place residual update for this token slot
-        box("test", [Q, K, V, scores, A, O], "5")
+        box("row_attention", [Q, K, V, scores, A, O], "5")
         E.data[:, t, :] = E.data[:, t, :] + O.data
+
+
+row_attention_inplace(E, single_eval_pos=4)
+layer_norm_inplace(E)
+
+
+# 3) MLP + LN
+mlp_inplace(E)          # x <- x + GELU(x)
+layer_norm_inplace(E)
+
+# ============================================================
+# Readout: take test row label token -> logits
+# In this layout: rows are [think1, think2, train1, train2, test1]
+# test index = T + N_train = 4
+# label token index = 2
+# ============================================================
+
+test_row_idx = 4       # 4
+label_tok_idx = 2                 # last token slot
+
+h_test = Tensor(E.data[test_row_idx, label_tok_idx, :].reshape(1, 4))  # (1,4)
+
+gelu = GELU()
+z = gelu.forward(h_test)  # (1,4)
+
+# Simple head D->C (pick first 2 dims as logits)
+W_out = Tensor([[1, 0],
+                [0, 1],
+                [0, 0],
+                [0, 0]])  # (4,2)
+b_out = Tensor([0.0, 0.0])
+
+logits = z.matmul(W_out) + b_out  # (1,2)
+
+print("h_test:", h_test.data)
+print("z (GELU):", z.data)
+print("logits:", logits.data)

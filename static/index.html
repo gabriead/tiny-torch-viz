@@ -107,7 +107,7 @@
     #run:hover { background: #2563eb; }
     #run:disabled { background: #475569; cursor: not-allowed; }
     #error { color: #ef4444; font-size: 12px; min-height: 20px; font-family: monospace; white-space: pre-wrap; }
-    
+
     /* Console output area */
     #console-container {
       margin-top: 12px;
@@ -288,7 +288,7 @@
       min-width: 50px;
       transition: background-color 0.15s ease, box-shadow 0.15s ease;
     }
-    
+
     /* Highlight styles for matmul hover */
     .matrix-table td.highlight-row {
       background: rgba(59, 130, 246, 0.3);
@@ -302,7 +302,7 @@
       background: rgba(251, 191, 36, 0.4);
       box-shadow: inset 0 0 0 2px #fbbf24;
     }
-    
+
     /* Tensor flow highlighting - same tensor used in multiple places */
     .matrix-card.tensor-flow-highlight {
       box-shadow: 0 0 0 3px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5);
@@ -316,7 +316,7 @@
       box-shadow: 0 0 0 3px #00ff00, 0 0 25px rgba(0, 255, 0, 0.6);
       border-color: #00ff00;
     }
-    
+
     /* Retro mode highlights */
     body.retro-mode .matrix-table td.highlight-row {
       background: rgba(0, 255, 255, 0.2);
@@ -332,17 +332,17 @@
     }
 
     .layout-grid { gap: 8px; }  /* display: inline-grid set above */
-    .layout-binary { 
-      grid-template-columns: auto auto; 
+    .layout-binary {
+      grid-template-columns: auto auto;
       grid-template-rows: auto auto;
-      gap: 8px; 
+      gap: 8px;
     }
     .layout-unary { grid-template-columns: auto; }
     /* Matmul layout: a on left, b on top-right, result on bottom-right */
     .pos-left { grid-row: 2; grid-column: 1; align-self: start; }
     .pos-top { grid-row: 1; grid-column: 2; align-self: end; }
     .pos-result { grid-row: 2; grid-column: 2; align-self: start; }
-    
+
     /* Element-wise operation layout: inputs side by side, result below left */
     .layout-elementwise {
       display: inline-grid;
@@ -362,7 +362,7 @@
       padding: 0 8px;
       user-select: none;
     }
-    
+
     /* Linear layer layout: matmul-style with X on top, W on left, result at intersection */
     .layout-linear {
       display: inline-grid;
@@ -494,7 +494,7 @@
     /* Scanline background for body */
     body.retro-mode {
       background-color: #050505;
-      background-image: 
+      background-image:
         linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%),
         linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.02), rgba(0,0,255,0.03));
       background-size: 100% 2px, 3px 100%;
@@ -502,7 +502,7 @@
 
     /* Canvas gets CRT overlay */
     body.retro-mode #canvas {
-      background: 
+      background:
         linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%),
         linear-gradient(#0a0f0a 1px, transparent 1px),
         linear-gradient(90deg, #0a0f0a 1px, transparent 1px);
@@ -631,7 +631,7 @@
       color: #ff4444;
       text-shadow: 0 0 4px rgba(255, 68, 68, 0.5);
     }
-    
+
     /* Console in retro mode */
     body.retro-mode #console-resizer::after {
       background: rgba(0, 255, 65, 0.3);
@@ -764,31 +764,185 @@ def label_embeddings(Y_in: Tensor):
     if Y_in.shape[-1] != 2:
         raise ValueError(f"Expected Y_in last dim=2, got shape {Y_in.shape}")
 
-#Scaled Dot Attention
+    E = Y_in.matmul(W_y) + b_y  # (n_total, D)
 
-x = Tensor(np.random.rand(4,4))
+    # optional: show each row embedding
+    for i in range(E.shape[0]):
+        box("Label Embedding", Tensor(E.data[i]), "5")
 
-w_q = Tensor(np.random.rand(4,4))
-w_k = Tensor(np.random.rand(4,4))
-w_v = Tensor(np.random.rand(4,4))
+    return E
 
-Q = w_q.matmul(x)
-K = w_k.matmul(x)
-V = w_v.matmul(x)
 
-box("Q", Q, "1")
-box("K", K, "22")
-box("V", V, "3")
 
-k_transpose = K.transpose()
-scores = Q.matmul(k_transpose)
-scaling_factor = 1/math.sqrt(x.shape[-1])
-scaled_scores = scores * scaling_factor
-softmax = Softmax()
-softmaxed_scores  = softmax.forward(scaled_scores, dim=-1)
+label_embeds = label_embeddings(y_clean)
+# print(label_embeds)
 
-attn_scores = softmaxed_scores.matmul(V)
-box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_scores], "4")
+# Step 3: Add Thinking Tokens
+Thinking_Tokens = Tensor([
+    [[0.01, 0.02, 0.03, 0.04],
+     [0.01, 0.02, 0.03, 0.04],
+     [0.01, 0.02, 0.03, 0.04]],
+
+    [[0.05, 0.06, 0.07, 0.08],
+     [0.05, 0.06, 0.07, 0.08],
+     [0.05, 0.06, 0.07, 0.08]]
+])
+box("Thinking Tokens", Thinking_Tokens, "4")
+
+# Computing full model input
+
+labels_reshaped = label_embeds.data.reshape(3, 1, 4)
+data_rows = np.concatenate([X_encoded.data, labels_reshaped], axis=1)
+E_numpy = np.concatenate([Thinking_Tokens.data, data_rows], axis=0)
+E = Tensor(E_numpy)
+
+# we need to adapt positional embeddings!
+# Create row positional embeddings
+P_col_pos_embeds = Tensor([[[0.1, 0.1, 0.1, 0.1],
+                            [0.2, 0.2, 0.2, 0.2],
+                            [0.3, 0.3, 0.3, 0.3]]])
+
+# Add positional embeddings
+E = E + P_col_pos_embeds
+box("Positional Embedding", E, "9")
+
+# Attention
+W_q = Tensor(np.diag([0.1, 0.2, 0.1, 0.2]))
+W_k = Tensor(np.diag([0.1, 0.1, 0.1, 0.1]))
+W_v = Tensor(np.diag([1, 1, 1, 1]))
+
+box("Attention weights", [W_q, W_k, W_v], "9")
+scaling_factor = np.sqrt(4)
+
+# labels = [E[1][2], E[2][2], E[2][2]]
+col_att_softmax = Softmax()
+
+
+def layer_norm_inplace(E: Tensor, eps=1e-5):
+    """
+    In-place LN over last dim D for every vector in E.
+    E: (S, Ttok, D)
+    """
+    x = E.data
+    mean = x.mean(axis=-1, keepdims=True)
+    var = ((x - mean) * (x - mean)).mean(axis=-1, keepdims=True)
+    x_norm = (x - mean) / np.sqrt(var + eps)
+    box("Layer norn", [Tensor(x), Tensor(mean), Tensor(var), Tensor(x_norm)], "7")
+    E.data[:] = x_norm
+
+def column_attention_inplace(E: Tensor):
+    """
+    In-place column attention:
+      For each item s: X = E[s] has shape (Ttok=3, D=4)
+      Does self-attention across the 3 tokens and writes back:
+         E[s] <- E[s] + Attn(E[s])
+    """
+    S, Ttok, D = E.shape
+    softmax = Softmax()
+
+    for s in range(S):
+        # Snapshot of current item (avoid in-place mixing during compute)
+        X = Tensor(E.data[s].copy())  # (3,4)
+
+        Q = X.matmul(W_q.transpose())  # (3,4)
+        K = X.matmul(W_k.transpose())  # (3,4)
+        V = X.matmul(W_v.transpose())  # (3,4)
+
+        scores = Q.matmul(K.transpose()) / math.sqrt(D)  # (3,3)
+        A = softmax.forward(scores, dim=-1)  # (3,3)
+        O = A.matmul(V)  # (3,4)
+
+        box("column_attention", [Q, K, V, scores, A, O], "5")
+
+        # In-place residual update of ALL tokens
+        E.data[s] = E.data[s] + O.data
+
+
+column_attention_inplace(E)
+layer_norm_inplace(E)
+box("Updated Logits", E + 0, "5")
+
+def mlp_inplace(E: Tensor):
+    """
+    Minimal hand-friendly MLP with residual:
+      x <- x + GELU(x)
+    In-place.
+    """
+    gelu = GELU()
+    x = Tensor(E.data.copy())
+    gx = gelu.forward(x).data
+    E.data[:] = E.data + gx
+
+
+
+def row_attention_inplace(E: Tensor, single_eval_pos: int):
+    """
+    In-place row attention:
+      For each token slot t:
+        Q from all S items:      E[:, t, :] -> (S, D)
+        K,V from first Klen rows E[:single_eval_pos, t, :] -> (Klen, D)
+      Writes:
+        E[:, t, :] <- E[:, t, :] + Attn_row(E[:, t, :])
+    """
+    S, Ttok, D = E.shape
+    softmax = Softmax()
+
+    Klen = single_eval_pos
+    assert 0 < Klen <= S, "single_eval_pos must be between 1 and S"
+
+    for t in range(Ttok):
+        # Snapshot streams (avoid in-place mixing)
+        X_all = Tensor(E.data[:, t, :].copy())  # (S, D)
+        X_kv = Tensor(E.data[:Klen, t, :].copy())  # (Klen, D)
+
+        Q = X_all.matmul(W_q.transpose())  # (S, D)
+        K = X_kv.matmul(W_k.transpose())  # (Klen, D)
+        V = X_kv.matmul(W_v.transpose())  # (Klen, D)
+
+        scores = Q.matmul(K.transpose()) / math.sqrt(D)  # (S, Klen)
+        A = softmax.forward(scores, dim=-1)  # (S, Klen)
+        O = A.matmul(V)  # (S, D)
+
+        # In-place residual update for this token slot
+        box("row_attention", [Q, K, V, scores, A, O], "5")
+        E.data[:, t, :] = E.data[:, t, :] + O.data
+
+
+row_attention_inplace(E, single_eval_pos=4)
+layer_norm_inplace(E)
+
+
+# 3) MLP + LN
+mlp_inplace(E)          # x <- x + GELU(x)
+layer_norm_inplace(E)
+
+# ============================================================
+# Readout: take test row label token -> logits
+# In this layout: rows are [think1, think2, train1, train2, test1]
+# test index = T + N_train = 4
+# label token index = 2
+# ============================================================
+
+test_row_idx = 4       # 4
+label_tok_idx = 2                 # last token slot
+
+h_test = Tensor(E.data[test_row_idx, label_tok_idx, :].reshape(1, 4))  # (1,4)
+
+gelu = GELU()
+z = gelu.forward(h_test)  # (1,4)
+
+# Simple head D->C (pick first 2 dims as logits)
+W_out = Tensor([[1, 0],
+                [0, 1],
+                [0, 0],
+                [0, 0]])  # (4,2)
+b_out = Tensor([0.0, 0.0])
+
+logits = z.matmul(W_out) + b_out  # (1,2)
+
+print("h_test:", h_test.data)
+print("z (GELU):", z.data)
+print("logits:", logits.data)
 
     </textarea>
     <button id="run">Run</button>
@@ -944,7 +1098,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         break;
     }
   }
-  
+
   // ==================== Console Output ====================
   function appendToConsole(text, type = 'info') {
     const consoleOutput = document.getElementById('console-output');
@@ -954,7 +1108,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     consoleOutput.appendChild(line);
     consoleOutput.scrollTop = consoleOutput.scrollHeight;
   }
-  
+
   function clearConsole() {
     document.getElementById('console-output').innerHTML = '';
   }
@@ -964,7 +1118,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     // First render pass: create elements to measure sizes, then create boxes
     renderFirstPass();
   }
-  
+
   // Create boxes from pending box() calls - following original implementation
   function createPendingBoxes(groupElById) {
     const PAD = 20;           // Consistent padding on all sides
@@ -974,13 +1128,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     const CHILD_GAP_Y = 20;  // Gap after each child
     const ROW_GAP = 30;
     const LEFT_MARGIN = 80;
-    
+
     // Track cursor position for laying out content
     let layoutCursorY = 100;
-    
+
     // Track which groups have been claimed by boxes (to prevent double-counting)
     const claimedGroupIds = new Set();
-    
+
     // Map tensor IDs to group IDs (only unclaimed groups)
     // Also traces back to include ancestor operations that produced the inputs
     // but stops at tensors that are explicitly listed in OTHER boxes
@@ -988,7 +1142,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       const gids = [];
       const visited = new Set();
       const tensorIdSet = new Set(tensorIds);
-      
+
       // Get all tensor IDs that are explicitly specified in OTHER boxes
       // These act as "boundaries" - we don't trace ancestors past these
       const otherBoxTensorIds = new Set();
@@ -999,17 +1153,17 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           }
         });
       });
-      
+
       function addGroup(tid, isExplicit = false) {
         if (visited.has(tid)) return;
         visited.add(tid);
-        
+
         // Don't trace ancestors past tensors that belong to other boxes
         // unless this tensor is explicitly listed in our box
         if (!isExplicit && otherBoxTensorIds.has(tid)) {
           return;
         }
-        
+
         const g = groups.find(gr => gr.outputId === tid);
         if (g && !gids.includes(g.id) && !claimedGroupIds.has(g.id)) {
           // If includeAncestors, first add groups that produced this group's inputs
@@ -1017,38 +1171,38 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           if (includeAncestors && g.inputIds) {
             g.inputIds.forEach(inputId => addGroup(inputId, false));
           }
-          
+
           // Then add this group
           gids.push(g.id);
         }
       }
-      
+
       tensorIds.forEach(tid => addGroup(tid, true));
       return gids;
     }
-    
+
     // Build parent-child relationships - detect automatically based on tensor containment
     // A box is a parent of another if it contains ALL tensors of the child box
     const boxesByLabel = {};
-    
+
     pendingBoxes.forEach(pb => {
       boxesByLabel[pb.label] = pb;
       pb.detectedChildren = [];  // Track detected child boxes
     });
-    
+
     // Detect parent-child relationships based on tensor containment
     pendingBoxes.forEach(potentialParent => {
       const parentTensorSet = new Set(potentialParent.tensorIds || []);
-      
+
       pendingBoxes.forEach(potentialChild => {
         if (potentialParent === potentialChild) return;
-        
+
         const childTensors = potentialChild.tensorIds || [];
         if (childTensors.length === 0) return;
-        
+
         // Check if parent contains ALL tensors of child
         const allContained = childTensors.every(tid => parentTensorSet.has(tid));
-        
+
         // Also check parent has MORE tensors (not equal - otherwise both would be parents of each other)
         if (allContained && parentTensorSet.size > childTensors.length) {
           // potentialChild is a child of potentialParent
@@ -1057,29 +1211,29 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         }
       });
     });
-    
+
     // Root boxes are those with no parent
     const rootBoxes = pendingBoxes.filter(pb => !pb.parent);
-    
+
     // Recursive function to create box hierarchy
     function createBoxHierarchy(pending, startY, startX) {
       const contentTop = startY + LABEL_H + PAD;
-      
+
       // Find children of this box
       const children = pendingBoxes.filter(p => p.parent === pending.label);
       const allGroupIds = getGroupIdsForTensors(pending.tensorIds);
-      
+
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       let cursorY = contentTop;
       let cursorX = startX + PAD;
-      
+
       function includeRect(x1, y1, x2, y2) {
         minX = Math.min(minX, x1);
         minY = Math.min(minY, y1);
         maxX = Math.max(maxX, x2);
         maxY = Math.max(maxY, y2);
       }
-      
+
       // Create this box
       const box = {
         id: 'b' + nextBoxId++,
@@ -1094,16 +1248,16 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         fromCode: true
       };
       boxes.push(box);
-      
+
       // 1) Create children first - position them SIDE BY SIDE
       const childGroupIdSet = new Set();
       let childMaxHeight = 0;
-      
+
       children.forEach(childPending => {
         const child = createBoxHierarchy(childPending, contentTop, cursorX);
         if (!child) return;
         box.childBoxIds.push(child.id);
-        
+
         // Collect all groups used by this child
         (child.groupIds || []).forEach(gid => childGroupIdSet.add(gid));
         // Also collect groups from grandchildren recursively
@@ -1115,30 +1269,30 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           });
         }
         collectChildGroups(child);
-        
+
         includeRect(child.x, child.y, child.x + child.w, child.y + child.h);
         childMaxHeight = Math.max(childMaxHeight, child.h);
         cursorX = child.x + child.w + CHILD_GAP_X;
       });
-      
+
       if (children.length > 0) {
         cursorY = contentTop + childMaxHeight + CHILD_GAP_Y;
       }
-      
+
       // 2) Layout this box's OWN groups (exclude groups used by children)
       const ownGroupIds = allGroupIds.filter(id => !childGroupIdSet.has(id));
-      
+
       if (ownGroupIds.length > 0) {
         // Layout in two columns
         const nLeft = Math.ceil(ownGroupIds.length / 2);
         const leftIds = ownGroupIds.slice(0, nLeft);
         const rightIds = ownGroupIds.slice(nLeft);
-        
+
         let leftX = startX + PAD;
         let rightX = leftX;
         let yL = cursorY, yR = cursorY;
         let maxLeftW = 0, maxRightW = 0;
-        
+
         // Measure and position left column
         leftIds.forEach(gid => {
           const g = groups.find(gr => gr.id === gid);
@@ -1156,9 +1310,9 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
             yL += h + ROW_GAP;
           }
         });
-        
+
         rightX = leftX + maxLeftW + COL_GAP;
-        
+
         // Measure and position right column
         rightIds.forEach(gid => {
           const g = groups.find(gr => gr.id === gid);
@@ -1176,13 +1330,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
             yR += h + ROW_GAP;
           }
         });
-        
+
         box.groupIds = ownGroupIds.slice();
         // Mark these groups as claimed so other boxes don't reuse them
         ownGroupIds.forEach(gid => claimedGroupIds.add(gid));
         cursorY = Math.max(yL, yR);
       }
-      
+
       // 3) Finalize box bounds
       if (isFinite(minX)) {
         box.x = minX - PAD;
@@ -1190,10 +1344,10 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         box.w = (maxX - minX) + 2 * PAD;
         box.h = (maxY - minY) + 2 * PAD + LABEL_H;
       }
-      
+
       return box;
     }
-    
+
     // Only process pending boxes if there are any
     if (pendingBoxes.length > 0) {
     // Create root boxes
@@ -1203,15 +1357,15 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           layoutCursorY = rootBox.y + rootBox.h + 50;
       }
     });
-    
+
       pendingBoxes.length = 0;
     }
-    
+
     // Layout any orphan groups (not in any box) - this runs ALWAYS
     const groupsInBoxes = new Set();
     boxes.forEach(b => (b.groupIds || []).forEach(gid => groupsInBoxes.add(gid)));
     const orphanGroupIds = groups.filter(g => !groupsInBoxes.has(g.id)).map(g => g.id);
-    
+
     if (orphanGroupIds.length > 0) {
       layoutGroupsTwoColumns(orphanGroupIds, groupElById, layoutCursorY, LEFT_MARGIN, true);
     }
@@ -1222,18 +1376,18 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function layoutGroupsTwoColumns(groupIds, groupElById, startY, leftMargin, forceLayout = true) {
     const COL_GAP = 80;  // Gap between columns
     const ROW_GAP = 50;  // Gap between rows
-    
+
     if (!groupIds.length) return null;
-    
+
     // Measure all groups
     const sizes = {};
     let maxLeftW = 0, maxRightW = 0;
-    
+
     // Split into two columns: left gets ceil(n/2)
     const nLeft = Math.ceil(groupIds.length / 2);
     const leftIds = groupIds.slice(0, nLeft);
     const rightIds = groupIds.slice(nLeft);
-    
+
     // Measure left column
     leftIds.forEach(id => {
       const el = groupElById[id];
@@ -1242,7 +1396,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       sizes[id] = { w, h };
       maxLeftW = Math.max(maxLeftW, w);
     });
-    
+
     // Measure right column
     rightIds.forEach(id => {
       const el = groupElById[id];
@@ -1251,10 +1405,10 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       sizes[id] = { w, h };
       maxRightW = Math.max(maxRightW, w);
     });
-    
+
     const leftX = leftMargin;
     const rightX = leftX + maxLeftW + COL_GAP;
-    
+
     // Position left column
     let yL = startY;
     leftIds.forEach(id => {
@@ -1272,7 +1426,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       }
       yL += sizes[id].h + ROW_GAP;
     });
-    
+
     // Position right column
     let yR = startY;
     rightIds.forEach(id => {
@@ -1290,7 +1444,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       }
       yR += sizes[id].h + ROW_GAP;
     });
-    
+
     // Compute bounding box based on actual positions
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     groupIds.forEach(id => {
@@ -1302,7 +1456,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       maxX = Math.max(maxX, g.x + sz.w);
       maxY = Math.max(maxY, g.y + sz.h);
     });
-    
+
     return { minX, minY, maxX, maxY, lastY: Math.max(yL, yR) };
   }
 
@@ -1310,16 +1464,16 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function renderFirstPass() {
     const canvas = document.getElementById('canvas');
     canvas.innerHTML = '';
-    
+
     // Add toolbar
     canvas.appendChild(createToolbar());
-    
+
     const content = document.createElement('div');
     content.id = 'canvas-content';
     canvas.appendChild(content);
-    
+
     const groupElById = {};
-    
+
     // Helper to generate label from group data using current tensor names
     function getGroupLabel(g) {
       // Helper to get tensor or create placeholder for missing tensor
@@ -1327,11 +1481,11 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         if (tensors[id]) return tensors[id];
         return { id, shape: [], data: [], name: id };
       }
-      
+
       const output = getOrPlaceholder(g.outputId);
       const inputs = (g.inputIds || []).map(id => getOrPlaceholder(id));
       const outputName = output?.name || g.opType;
-      
+
       // For linear layers, only show the original input (not weight/bias)
       // The instrumentation adds weight at index 0, so original input is at index 1
       if (g.opType.toLowerCase() === 'linear' && inputs.length >= 2) {
@@ -1339,7 +1493,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         const inputName = originalInput?.name || originalInput?.id || 'x';
         return `${outputName} = Linear(${inputName})`;
       }
-      
+
       // Helper to get display name for an input tensor
       function getInputDisplayName(tensor) {
         if (tensor.name) return tensor.name;
@@ -1357,11 +1511,11 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         }
         return tensor.id;
       }
-      
+
       const inputNames = inputs.map(t => getInputDisplayName(t)).join(', ');
       return `${outputName} = ${g.opType}(${inputNames})`;
     }
-    
+
     // Helper to build op object from group data
     function getGroupOp(g) {
       // Create placeholder tensor if missing (for backward-compatible JSON loading)
@@ -1370,12 +1524,12 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         // Create placeholder with just id (will render as empty matrix)
         return { id, shape: [], data: [], name: id };
       }
-      
+
       const output = getOrPlaceholder(g.outputId);
       const inputs = (g.inputIds || []).map(id => getOrPlaceholder(id));
       return { type: g.opType, inputs, output, meta: g.meta || {} };
     }
-    
+
     // Render all groups at temporary positions to measure
     groups.forEach(g => {
       const el = document.createElement('div');
@@ -1384,20 +1538,20 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       el.style.left = '0px';
       el.style.top = '0px';
       el.style.visibility = 'hidden'; // Hidden during measurement
-      
+
       const label = document.createElement('div');
       label.className = 'group-label';
       label.textContent = getGroupLabel(g);
       el.appendChild(label);
-      
+
       renderOp(el, getGroupOp(g));
       content.appendChild(el);
       groupElById[g.id] = el;
     });
-    
+
     // Force layout calculation
     content.offsetHeight;
-    
+
     // If skipLayout is set, just position groups using their saved coordinates
     if (skipLayout) {
       // Find minimum Y to calculate offset if needed (ensure content is below toolbar)
@@ -1407,7 +1561,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         if (typeof g.y === 'number') minLoadedY = Math.min(minLoadedY, g.y);
       });
       const yOffset = (minLoadedY < MIN_Y && minLoadedY !== Infinity) ? (MIN_Y - minLoadedY) : 0;
-      
+
       // Use saved positions - no layout calculation
       groups.forEach(g => {
         const el = groupElById[g.id];
@@ -1421,7 +1575,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           g.y = yPos;
         }
       });
-      
+
       // Boxes already have their x, y, w, h from JSON - apply same offset
       boxes.forEach(box => {
         if (typeof box.x !== 'number') box.x = 0;
@@ -1430,13 +1584,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         if (typeof box.w !== 'number' || box.w <= 0) box.w = 100;
         if (typeof box.h !== 'number' || box.h <= 0) box.h = 100;
       });
-      
+
       skipLayout = false;  // Reset flag
     } else {
       // Create boxes from pending box() calls - this handles all layout
       createPendingBoxes(groupElById);
     }
-    
+
     // Make groups visible and attach behaviors
     groups.forEach(g => {
       const el = groupElById[g.id];
@@ -1446,7 +1600,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         el.style.top = g.y + 'px';
       }
     });
-    
+
     // Now do final render with boxes
     renderFinal(groupElById);
   }
@@ -1454,7 +1608,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function createToolbar() {
     const toolbar = document.createElement('div');
     toolbar.id = 'toolbar';
-    
+
     function addBtn(label, onClick, isTool, toolName) {
       const btn = document.createElement('button');
       btn.textContent = label;
@@ -1462,12 +1616,12 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       btn.onclick = onClick;
       toolbar.appendChild(btn);
     }
-    
+
     addBtn('Select', () => { currentTool = 'select'; selectedGroupIds.clear(); selectedBoxIds.clear(); render(); }, true, 'select');
     addBtn('Add Note', addNote);
     addBtn('Export JSON', exportJson);
     addBtn('Load JSON', () => document.getElementById('jsonFileInput').click());
-    
+
     const vg = document.createElement('div');
     vg.className = 'tool-group';
     vg.innerHTML = '<span class="tool-label">View</span>';
@@ -1481,7 +1635,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     });
     sel.onchange = () => { zoomLevel = parseInt(sel.value) / 100; applyZoom(); };
     vg.appendChild(sel);
-    
+
     const dt = document.createElement('label');
     dt.className = 'tool-toggle';
     const cb = document.createElement('input');
@@ -1490,7 +1644,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     dt.appendChild(cb);
     dt.appendChild(document.createTextNode(' Data'));
     vg.appendChild(dt);
-    
+
     // Retro mode toggle
     const rt = document.createElement('label');
     rt.className = 'tool-toggle';
@@ -1505,15 +1659,15 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     rt.appendChild(rcb);
     rt.appendChild(document.createTextNode(' Retro'));
     vg.appendChild(rt);
-    
+
     toolbar.appendChild(vg);
-    
+
     return toolbar;
   }
 
   function renderFinal(groupElById) {
     const content = document.getElementById('canvas-content');
-    
+
     // Sort boxes: parent boxes first (larger), child boxes last (smaller)
     // This ensures parent boxes are rendered behind child boxes
     const sortedBoxes = [...boxes].sort((a, b) => {
@@ -1522,11 +1676,11 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       const areaB = (b.w || 0) * (b.h || 0);
       return areaB - areaA;  // Larger boxes first
     });
-    
+
     // Draw boxes - larger ones first (behind), smaller ones after (in front)
     sortedBoxes.forEach(box => {
       if (box.w <= 0 || box.h <= 0) return;
-      
+
       const colors = getBoxColors(box.scheme);
       const el = document.createElement('div');
       el.className = 'layer-box';
@@ -1537,19 +1691,19 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       el.style.height = box.h + 'px';
       el.style.borderColor = colors.border;
       el.style.background = colors.bg;
-      
+
       if (selectedBoxIds.has(box.id)) el.classList.add('layer-box-selected');
-      
+
       const lbl = document.createElement('div');
       lbl.className = 'layer-box-label';
       lbl.textContent = box.label;
       lbl.style.color = colors.label;
       el.appendChild(lbl);
-      
+
       attachBoxDrag(box, el, lbl, groupElById);
       content.insertBefore(el, content.firstChild);
     });
-    
+
     // Attach drag behavior to groups
     groups.forEach(g => {
       const el = groupElById[g.id];
@@ -1557,19 +1711,19 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       const labelEl = el.querySelector('.group-label');
       if (labelEl) attachGroupDrag(g, el, labelEl);
     });
-    
+
     // Render notes
     canvasNotes.forEach(note => {
       const el = document.createElement('div');
       el.className = 'note-container';
       el.style.left = note.x + 'px';
       el.style.top = note.y + 'px';
-      
+
       const header = document.createElement('div');
       header.className = 'note-header';
       header.textContent = 'NOTE';
       el.appendChild(header);
-      
+
       const body = document.createElement('div');
       body.className = 'note-body';
       // Parse markdown and then render LaTeX
@@ -1578,12 +1732,12 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       // Render LaTeX with KaTeX
       renderLatexInElement(body);
       el.appendChild(body);
-      
+
       attachNoteDrag(note, el, header);
       el.ondblclick = () => openNoteModal(note);
       content.appendChild(el);
     });
-    
+
     // Click canvas to deselect
     content.onclick = e => {
       if (e.target === content && currentTool === 'select') {
@@ -1592,9 +1746,9 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         render();
       }
     };
-    
+
     applyZoom();
-    
+
     // Set up tensor flow highlighting after render is complete
     setupTensorFlowHighlighting();
   }
@@ -1651,7 +1805,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       const totalR = mat.length, totalC = mat[0].length;
       const showR = Math.min(totalR, MAX_ROWS), showC = Math.min(totalC, MAX_COLS);
       const truncatedR = totalR > MAX_ROWS, truncatedC = totalC > MAX_COLS;
-      
+
       for (let r = 0; r < showR; r++) {
         const tr = document.createElement('tr');
         tr.dataset.row = r;
@@ -1693,10 +1847,10 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function setupElementwiseHover(inputCards, outputCard) {
     const outputTable = outputCard.querySelector('.matrix-table');
     if (!outputTable) return;
-    
+
     const inputTables = inputCards.map(card => card.querySelector('.matrix-table')).filter(Boolean);
     if (inputTables.length === 0) return;
-    
+
     // Detect the shape of each input table (for broadcasting)
     const inputShapes = inputTables.map(table => {
       const rows = table.querySelectorAll('tr');
@@ -1704,19 +1858,19 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       const numCols = rows[0] ? rows[0].querySelectorAll('td[data-col]').length : 0;
       return { rows: numRows, cols: numCols };
     });
-    
+
     const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
-    
+
     outputCells.forEach(cell => {
       cell.style.cursor = 'pointer';
-      
+
       cell.addEventListener('mouseenter', () => {
         const row = parseInt(cell.dataset.row);
         const col = parseInt(cell.dataset.col);
-        
+
         // Highlight the output cell
         cell.classList.add('highlight-cell');
-        
+
         // Highlight corresponding cells in all input matrices (with broadcasting)
         inputTables.forEach((inputTable, idx) => {
           const shape = inputShapes[idx];
@@ -1724,14 +1878,14 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           // If input has only 1 col, always use col 0
           const targetRow = shape.rows === 1 ? 0 : row;
           const targetCol = shape.cols === 1 ? 0 : col;
-          
+
           const inputCell = inputTable.querySelector(`td[data-row="${targetRow}"][data-col="${targetCol}"]`);
           if (inputCell) {
             inputCell.classList.add('highlight-cell');
           }
         });
       });
-      
+
       cell.addEventListener('mouseleave', () => {
         // Remove all highlights
         cell.classList.remove('highlight-cell');
@@ -1749,21 +1903,21 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function setupTransposeHover(inputCard, outputCard) {
     const outputTable = outputCard.querySelector('.matrix-table');
     const inputTable = inputCard.querySelector('.matrix-table');
-    
+
     if (!outputTable || !inputTable) return;
-    
+
     const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
-    
+
     outputCells.forEach(cell => {
       cell.style.cursor = 'pointer';
-      
+
       cell.addEventListener('mouseenter', () => {
         const row = cell.dataset.row;
         const col = cell.dataset.col;
-        
+
         // Highlight the output cell
         cell.classList.add('highlight-cell');
-        
+
         // For transpose: input[col, row] -> output[row, col]
         // So to find the source, swap row and col
         const inputCell = inputTable.querySelector(`td[data-row="${col}"][data-col="${row}"]`);
@@ -1771,7 +1925,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           inputCell.classList.add('highlight-cell');
         }
       });
-      
+
       cell.addEventListener('mouseleave', () => {
         // Remove all highlights
         cell.classList.remove('highlight-cell');
@@ -1787,32 +1941,32 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     const resultTable = resultCard.querySelector('.matrix-table');
     const leftTable = leftCard.querySelector('.matrix-table');
     const topTable = topCard.querySelector('.matrix-table');
-    
+
     if (!resultTable || !leftTable || !topTable) return;
-    
+
     const resultCells = resultTable.querySelectorAll('td[data-row][data-col]');
-    
+
     resultCells.forEach(cell => {
       cell.style.cursor = 'pointer';
-      
+
       cell.addEventListener('mouseenter', () => {
         const row = cell.dataset.row;
         const col = cell.dataset.col;
-        
+
         // Highlight the result cell
         cell.classList.add('highlight-cell');
-        
+
         // Highlight the corresponding row in the left matrix (W)
         leftTable.querySelectorAll(`td[data-row="${row}"]`).forEach(td => {
           td.classList.add('highlight-row');
         });
-        
+
         // Highlight the corresponding column in the top matrix (X.T)
         topTable.querySelectorAll(`td[data-col="${col}"]`).forEach(td => {
           td.classList.add('highlight-col');
         });
       });
-      
+
       cell.addEventListener('mouseleave', () => {
         // Remove all highlights
         cell.classList.remove('highlight-cell');
@@ -1831,53 +1985,53 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   function setupTensorFlowHighlighting() {
     const canvasContent = document.getElementById('canvas-content');
     if (!canvasContent) return;
-    
+
     // Get all matrix cards
     const allCards = Array.from(canvasContent.querySelectorAll('.matrix-card'));
-    
+
     // Build map using the displayed label (variable name) for matching
     const labelCardMap = {};  // label -> [cards]
-    
+
     allCards.forEach(card => {
       // Get the displayed label from the title
       const titleSpan = card.querySelector('.matrix-title span');
       if (!titleSpan) return;
-      
+
       let label = titleSpan.textContent.trim();
       // Remove .T suffix for matching (Q.T should match Q)
       const baseLabel = label.replace(/\.T$/, '');
-      
+
       if (!labelCardMap[baseLabel]) labelCardMap[baseLabel] = [];
       labelCardMap[baseLabel].push(card);
     });
-    
+
     // Find labels that appear multiple times
     const multiUseLabels = Object.entries(labelCardMap)
       .filter(([_, cards]) => cards.length > 1)
       .map(([label, cards]) => `${label}(${cards.length})`);
-    
+
     if (multiUseLabels.length > 0) {
       console.log('Tensor flow: hover to highlight:', multiUseLabels.join(', '));
     }
-    
+
     // Set up hover for cards that share a label
     allCards.forEach(card => {
       const titleSpan = card.querySelector('.matrix-title span');
       if (!titleSpan) return;
-      
+
       let label = titleSpan.textContent.trim();
       const baseLabel = label.replace(/\.T$/, '');
-      
+
       const matchingCards = labelCardMap[baseLabel] || [];
-      
+
       // Only set up hover if this label appears multiple times
       if (matchingCards.length > 1) {
         card.style.cursor = 'pointer';
-        
+
         card.addEventListener('mouseenter', () => {
           matchingCards.forEach(c => c.classList.add('tensor-flow-highlight'));
         });
-        
+
         card.addEventListener('mouseleave', () => {
           matchingCards.forEach(c => c.classList.remove('tensor-flow-highlight'));
         });
@@ -1888,28 +2042,28 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   // ==================== Render Operation ====================
   function renderOp(container, op) {
     const { type, inputs, output, meta } = op;
-    
+
     // Safe helper to get tensor name with fallback
     function getName(t, fallback = '?') {
       if (!t) return fallback;
       return t.name || t.id || fallback;
     }
-    
+
     // Ensure inputs is always an array
     const safeInputs = inputs || [];
     const safeOutput = output || { id: '?', name: type, shape: [], data: [] };
-    
+
     const isElementwise = ['add', 'sub', 'mul', 'div'].includes(type) && safeInputs.length >= 2;
     const isMatmul = type === 'matmul' && safeInputs.length >= 2;
     const isLoss = ['mseloss', 'crossentropyloss', 'bceloss'].includes(type) && safeInputs.length >= 2;
     const isLinear = type === 'linear' && safeInputs.length >= 2 && meta?.has_weight;
-    
+
     // Determine output orientation for reduction operations
     let outputOrientation = 'auto';
     if (['sum', 'mean', 'max'].includes(type) && safeInputs[0] && safeOutput.shape && safeOutput.shape.length === 1) {
       const inputShape = safeInputs[0].shape || [];
       const axis = meta?.axis ?? meta?.arg0;
-      
+
       if (inputShape.length >= 2) {
         let normalizedAxis = axis;
         if (normalizedAxis < 0) normalizedAxis = inputShape.length + normalizedAxis;
@@ -1920,95 +2074,95 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         }
       }
     }
-    
+
     // Get operator symbol for element-wise operations
     const opSymbols = { add: '+', sub: '−', mul: '×', div: '÷' };
-    
+
     if (isElementwise && safeInputs[0] && safeInputs[1]) {
       // Element-wise: inputs side by side, result below left input
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
-      
+
       // Determine orientation for 1D tensors based on NumPy broadcasting rules:
       // A 1D tensor (N,) broadcasts as (1, N) - a ROW, not a column
       // This affects how we display the second operand (typically bias)
       const input0Shape = safeInputs[0].shape || [];
       const input1Shape = safeInputs[1].shape || [];
-      
+
       // If second input is 1D and first is 2D, display second as ROW (how NumPy broadcasts it)
       let rightOrientation = 'auto';
       if (input1Shape.length === 1 && input0Shape.length >= 2) {
         rightOrientation = 'row';  // 1D broadcasts as row in NumPy
       }
-      
+
       // First operand (top-left)
       const left = createMatrixCard(getName(safeInputs[0]), safeInputs[0], 'auto', 'input');
       left.classList.add('elem-left');
       wrapper.appendChild(left);
-      
+
       // Operator symbol (top-center)
       const opSym = document.createElement('span');
       opSym.className = 'op-symbol-large elem-op';
       opSym.textContent = opSymbols[type] || '+';
       wrapper.appendChild(opSym);
-      
+
       // Second operand (top-right) - use row orientation for 1D bias
       const right = createMatrixCard(getName(safeInputs[1]), safeInputs[1], rightOrientation, 'input');
       right.classList.add('elem-right');
       wrapper.appendChild(right);
-      
+
       // Result (bottom-left, below first operand)
       const result = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'output');
       result.classList.add('elem-result');
       wrapper.appendChild(result);
-      
+
       // Add element-wise hover highlighting
       setupElementwiseHover([left, right], result);
-      
+
       container.appendChild(wrapper);
       return;
     }
-    
+
     if (isLoss && safeInputs[0] && safeInputs[1]) {
       // Loss functions: predictions | targets, loss below
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
-      
+
       // Predictions (top-left)
       const preds = createMatrixCard(getName(safeInputs[0], 'predictions'), safeInputs[0], 'auto', 'input');
       preds.classList.add('elem-left');
       wrapper.appendChild(preds);
-      
+
       // Arrow or separator (optional visual)
       const arrow = document.createElement('span');
       arrow.className = 'op-symbol-large elem-op';
       arrow.textContent = '→';
       arrow.title = 'compared to';
       wrapper.appendChild(arrow);
-      
+
       // Targets (top-right)
       const targs = createMatrixCard(getName(safeInputs[1], 'targets'), safeInputs[1], 'auto', 'input');
       targs.classList.add('elem-right');
       wrapper.appendChild(targs);
-      
+
       // Loss value (bottom-left)
       const lossCard = createMatrixCard(getName(safeOutput, 'loss'), safeOutput, 'auto', 'output');
       lossCard.classList.add('elem-result');
       wrapper.appendChild(lossCard);
-      
+
       // Add element-wise hover highlighting
       setupElementwiseHover([preds, targs], lossCard);
-      
+
       container.appendChild(wrapper);
       return;
     }
-    
+
     if (isLinear && safeInputs[0] && safeInputs[1]) {
       // Linear layer: show as matmul layout for W @ X.T
       // Instrumentation inserts weight at front: inputs[0] = weight, inputs[1] = x
       const weight = safeInputs[0];
       const x = safeInputs[1];
-      
+
       // Create transposed version of x for visualization
       // The computation is (W @ x.T).T, so we show x.T on top
       const xT = {
@@ -2023,7 +2177,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           xT.data = x.data[0].map((_, colIdx) => x.data.map(row => row[colIdx]));
         }
       }
-      
+
       // Create transposed version of output for visualization
       const outputT = {
         ...(safeOutput || {}),
@@ -2037,65 +2191,65 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           outputT.data = safeOutput.data[0].map((_, colIdx) => safeOutput.data.map(row => row[colIdx]));
         }
       }
-      
+
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-linear';
-      
+
       // Empty cell for top-left (matmul alignment)
       const emptyCell = document.createElement('div');
       emptyCell.className = 'linear-empty';
       wrapper.appendChild(emptyCell);
-      
+
       // Input X.T (top-right position) - with role for hover highlighting
       const inputCard = createMatrixCard(xT.name, xT, 'auto', 'top');
       inputCard.classList.add('linear-input');
       wrapper.appendChild(inputCard);
-      
+
       // Weight matrix W (left position)
       const weightCard = createMatrixCard('W', weight, 'auto', 'left');
       weightCard.classList.add('linear-weight');
       wrapper.appendChild(weightCard);
-      
+
       // Output (bottom-right) - show transposed to match W @ X.T dimensions
       const outputCard = createMatrixCard(outputT.name, outputT, 'auto', 'result');
       outputCard.classList.add('linear-output');
       wrapper.appendChild(outputCard);
-      
+
       // Add hover highlighting for matmul visualization
       setupMatmulHover(wrapper, weightCard, inputCard, outputCard);
-      
+
       container.appendChild(wrapper);
       return;
     }
-    
+
     if (isMatmul && safeInputs[0] && safeInputs[1]) {
       // Matrix multiplication: keep grid layout for proper alignment
       const grid = document.createElement('div');
       grid.className = 'layout-grid layout-binary';
-    
+
       const left = createMatrixCard(getName(safeInputs[0]), safeInputs[0], 'auto', 'left');
       left.classList.add('pos-left');
       grid.appendChild(left);
-      
+
       const top = createMatrixCard(getName(safeInputs[1]), safeInputs[1], 'auto', 'top');
       top.classList.add('pos-top');
       grid.appendChild(top);
-      
+
       const res = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'result');
       res.classList.add('pos-result');
       grid.appendChild(res);
-      
+
       // Add hover highlighting for matmul visualization
       setupMatmulHover(grid, left, top, res);
-      
+
       container.appendChild(grid);
       return;
     }
-    
+
     // Unary operations (sum, mean, max, transpose, relu, sigmoid, etc.)
     const grid = document.createElement('div');
     grid.className = 'layout-grid layout-unary';
-    
+
     // Helper to get display name for a tensor, falling back to producer's output name
     function getInputDisplayName(tensor) {
       if (!tensor) return '?';
@@ -2114,7 +2268,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       }
       return tensor.id;
     }
-    
+
     const inputCards = [];
     if (safeInputs[0]) {
       const inputLabel = getInputDisplayName(safeInputs[0]);
@@ -2124,7 +2278,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     }
     const outputCard = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'output');
     grid.appendChild(outputCard);
-    
+
     // Add hover highlighting based on operation type
     if (type === 'transpose' && inputCards.length > 0) {
       // Transpose: output[i,j] corresponds to input[j,i]
@@ -2136,7 +2290,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         setupElementwiseHover(inputCards, outputCard);
       }
     }
-    
+
     container.appendChild(grid);
   }
 
@@ -2156,7 +2310,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   // ==================== LaTeX Rendering ====================
   function renderLatexInElement(el) {
     if (!window.katex) return;
-    
+
     // Process display math: $$...$$
     el.innerHTML = el.innerHTML.replace(/\$\$([\s\S]*?)\$\$/g, (match, tex) => {
       try {
@@ -2165,7 +2319,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         return match;
       }
     });
-    
+
     // Process inline math: $...$
     el.innerHTML = el.innerHTML.replace(/\$([^\$]+?)\$/g, (match, tex) => {
       try {
@@ -2195,10 +2349,10 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       if (e.target.closest('.matrix-card') && !e.target.closest('.group-label')) {
         // Allow clicking but not dragging from matrix cards
       }
-      
+
       e.preventDefault();
       e.stopPropagation();
-      
+
       // If box tool is active, toggle selection for box creation
       if (currentTool === 'box') {
         if (selectedGroupIds.has(group.id)) {
@@ -2210,15 +2364,15 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         }
         return;
       }
-      
+
       // Select tool: drag the group
       selectedGroupIds.clear();
       selectedGroupIds.add(group.id);
       el.classList.add('group-selected');
-      
+
       const startX = e.clientX, startY = e.clientY;
       const origX = group.x, origY = group.y;
-      
+
       function onMove(ev) {
         const dx = (ev.clientX - startX) / zoomLevel;
         const dy = (ev.clientY - startY) / zoomLevel;
@@ -2227,12 +2381,12 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         el.style.left = group.x + 'px';
         el.style.top = group.y + 'px';
       }
-      
+
       function onUp() {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       }
-      
+
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     };
@@ -2242,18 +2396,18 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     labelEl.onmousedown = function(e) {
       e.preventDefault();
       e.stopPropagation();
-      
+
       selectedBoxIds.clear();
       selectedBoxIds.add(box.id);
       el.classList.add('layer-box-selected');
-      
+
       const startX = e.clientX, startY = e.clientY;
       const boxStart = { x: box.x, y: box.y };
-      
+
       // Collect all groups to move (direct groups + groups from child boxes)
       const groupStarts = {};
       const childBoxStarts = {};
-      
+
       function collectGroupsFromBox(b) {
         (b.groupIds || []).forEach(gid => {
           const g = groups.find(gr => gr.id === gid);
@@ -2269,17 +2423,17 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         });
       }
       collectGroupsFromBox(box);
-      
+
       function onMove(ev) {
         const dx = (ev.clientX - startX) / zoomLevel;
         const dy = (ev.clientY - startY) / zoomLevel;
-        
+
         // Move this box
         box.x = boxStart.x + dx;
         box.y = boxStart.y + dy;
         el.style.left = box.x + 'px';
         el.style.top = box.y + 'px';
-        
+
         // Move child boxes
         Object.keys(childBoxStarts).forEach(cid => {
           const childBox = boxes.find(cb => cb.id === cid);
@@ -2293,7 +2447,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
             }
           }
         });
-        
+
         // Move all groups
         Object.keys(groupStarts).forEach(gid => {
           const g = groups.find(gr => gr.id === gid);
@@ -2306,20 +2460,20 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           }
         });
       }
-      
+
       function onUp() {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       }
-      
+
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     };
-    
+
     // Click to select
     el.onclick = e => {
       e.stopPropagation();
-      
+
       // In Box mode, toggle selection for nesting
       if (currentTool === 'box') {
         if (selectedBoxIds.has(box.id)) {
@@ -2332,7 +2486,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
         render();
         return;
       }
-      
+
       // Select mode
       selectedBoxIds.clear();
       selectedBoxIds.add(box.id);
@@ -2344,22 +2498,22 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     header.onmousedown = function(e) {
       e.preventDefault();
       e.stopPropagation();
-      
+
       const startX = e.clientX, startY = e.clientY;
       const origX = note.x, origY = note.y;
-      
+
       function onMove(ev) {
         note.x = origX + (ev.clientX - startX) / zoomLevel;
         note.y = origY + (ev.clientY - startY) / zoomLevel;
         el.style.left = note.x + 'px';
         el.style.top = note.y + 'px';
       }
-      
+
       function onUp() {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
       }
-      
+
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     };
@@ -2399,18 +2553,18 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       alert('Select groups or boxes first (use Box tool to click on them)');
       return;
     }
-    
+
     const label = prompt('Box label:', 'Box ' + (boxes.length + 1));
     if (!label) return;
-    
+
     const scheme = prompt('Color scheme (1-6):', '1') || '1';
-    
+
     // For parent boxes that wrap other boxes:
     // - Only track direct group IDs (not groups from child boxes)
     // - Track child box IDs separately
     const directGroupIds = Array.from(selectedGroupIds);
     const childBoxIds = Array.from(selectedBoxIds);
-    
+
     boxes.push({
       id: 'b' + nextBoxId++,
       label: label,
@@ -2420,13 +2574,13 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       x: 0, y: 0, w: 0, h: 0,
       fromCode: false
     });
-    
+
     selectedGroupIds.clear();
     selectedBoxIds.clear();
     currentTool = 'select';
     render();
   }
-  
+
   function deleteSelected() {
     // Delete selected boxes
     selectedBoxIds.forEach(bid => {
@@ -2434,7 +2588,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       if (idx >= 0) boxes.splice(idx, 1);
     });
     selectedBoxIds.clear();
-    
+
     // Delete selected groups
     selectedGroupIds.forEach(gid => {
       const idx = groups.findIndex(g => g.id === gid);
@@ -2446,36 +2600,36 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
       });
     });
     selectedGroupIds.clear();
-    
+
     render();
   }
 
   // ==================== JSON ====================
   function exportJson() {
-    const state = { 
-      code: document.getElementById('code').value, 
-      groups: groups.map(g => ({ 
-        id: g.id, 
-        opType: g.opType, 
-        inputIds: g.inputIds, 
-        outputId: g.outputId, 
+    const state = {
+      code: document.getElementById('code').value,
+      groups: groups.map(g => ({
+        id: g.id,
+        opType: g.opType,
+        inputIds: g.inputIds,
+        outputId: g.outputId,
         meta: g.meta,
-        x: g.x, 
-        y: g.y 
+        x: g.x,
+        y: g.y
       })),
-      boxes: boxes.map(b => ({ 
-        id: b.id, label: b.label, scheme: b.scheme, 
+      boxes: boxes.map(b => ({
+        id: b.id, label: b.label, scheme: b.scheme,
         groupIds: b.groupIds, childBoxIds: b.childBoxIds,
-        x: b.x, y: b.y, w: b.w, h: b.h, 
-        fromCode: b.fromCode 
+        x: b.x, y: b.y, w: b.w, h: b.h,
+        fromCode: b.fromCode
       })),
       tensors: Object.fromEntries(
         Object.entries(tensors)
           .filter(([id, t]) => t != null)  // Skip null/undefined tensors
           .map(([id, t]) => [id, {
-            id: t.id || id, 
-            shape: t.shape || [], 
-            data: t.data || [], 
+            id: t.id || id,
+            shape: t.shape || [],
+            data: t.data || [],
             name: t.name || null
           }])
       ),
@@ -2487,7 +2641,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     a.download = 'tinytorch-' + new Date().toISOString().slice(0,10) + '.json';
     a.click();
   }
-  
+
   document.getElementById('jsonFileInput').onchange = e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -2495,10 +2649,10 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     reader.onload = ev => {
       try {
         const state = JSON.parse(ev.target.result);
-        
+
         // Restore code
         if (state.code) document.getElementById('code').value = state.code;
-        
+
         // Restore tensors (needed for rendering)
         if (state.tensors && typeof state.tensors === 'object') {
           // Clear and restore tensors
@@ -2509,7 +2663,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
             }
           });
         }
-        
+
         // Restore groups
         if (state.groups && Array.isArray(state.groups)) {
           groups.length = 0;
@@ -2517,7 +2671,7 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           const groupNums = groups.map(g => parseInt((g.id || '').replace('g', '')) || 0);
           nextGroupId = groupNums.length > 0 ? Math.max(...groupNums) + 1 : 1;
         }
-        
+
         // Restore boxes
         if (state.boxes && Array.isArray(state.boxes)) {
           boxes.length = 0;
@@ -2525,45 +2679,45 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
           const boxNums = boxes.map(b => parseInt((b.id || '').replace('b', '')) || 0);
           nextBoxId = boxNums.length > 0 ? Math.max(...boxNums) + 1 : 1;
         }
-        
+
         // Restore notes
         if (state.notes) {
           canvasNotes.length = 0;
           state.notes.forEach(n => canvasNotes.push(n));
         }
-        
+
         // Set flag to preserve loaded positions
         skipLayout = true;
-        
+
         // If tensors weren't in the JSON (old format), warn user
         if (!state.tensors || Object.keys(state.tensors).length === 0) {
           alert('This JSON was saved in an old format without tensor data.\n\n' +
                 'The layout will be restored, but matrices will be empty.\n' +
                 'To get full data: Run code, then Export JSON again.');
         }
-        
+
         // Reset zoom to 100% for proper positioning (set before render so toolbar picks it up)
         zoomLevel = 1;
-        
+
         // Render without running code (data already loaded or using placeholders)
         render();
-        
+
         // After render, ensure zoom select shows correct value and scroll to top
         setTimeout(() => {
           const zoomSelect = document.querySelector('#toolbar select');
           if (zoomSelect) zoomSelect.value = '100%';
           applyZoom();
-          
+
           const canvas = document.getElementById('canvas');
           if (canvas) {
             canvas.scrollTop = 0;
             canvas.scrollLeft = 0;
           }
         }, 50);
-        
-      } catch(err) { 
+
+      } catch(err) {
         console.error('JSON load error:', err);
-        alert('Invalid JSON: ' + err.message); 
+        alert('Invalid JSON: ' + err.message);
       }
       // Reset file input so same file can be loaded again
       e.target.value = '';
@@ -2602,25 +2756,25 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
     const resizer = document.getElementById('console-resizer');
     const consoleContainer = document.getElementById('console-container');
     let startY, startHeight;
-    
+
     resizer.addEventListener('mousedown', (e) => {
       e.preventDefault();
       startY = e.clientY;
       startHeight = consoleContainer.offsetHeight;
-      
+
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
       document.body.style.cursor = 'ns-resize';
       document.body.style.userSelect = 'none';
     });
-    
+
     function onMouseMove(e) {
       // Dragging up increases height (startY - e.clientY is positive when moving up)
       const deltaY = startY - e.clientY;
       const newHeight = Math.max(60, Math.min(400, startHeight + deltaY));
       consoleContainer.style.height = newHeight + 'px';
     }
-    
+
     function onMouseUp() {
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
@@ -2634,9 +2788,51 @@ box("attn_scores", [k_transpose, scores, scaled_scores, softmaxed_scores, attn_s
   if (localStorage.getItem('retroMode') === '1') {
     document.body.classList.add('retro-mode');
   }
-  
+
   document.getElementById('run').disabled = true;
   connectWebSocket();
+// ==================== Automatic PDF Loading ====================
+// ==================== Automatic PDF Loading ====================
+  async function autoLoadMathPDF() {
+    // Wait for PDF library
+    if (!window.pdfjsLib) {
+        setTimeout(autoLoadMathPDF, 200);
+    }
+
+    try {
+      // FIX: Fetch from '/static/math.pdf' because the server mounts it there
+      // We try both paths just in case you open the file directly or via server
+      let response = await fetch('static/math.pdf');
+
+      // Fallback: If that fails (e.g. 404), try the root (for file:// protocol or different configs)
+      if (!response.ok) {
+        console.log("...trying fallback path...");
+        response = await fetch('math.pdf');
+      }
+
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      const loadingTask = pdfjsLib.getDocument(url);
+      loadingTask.promise.then(doc => {
+        pdfDoc = doc;
+        pdfPageNum = 1;
+        pdfZoomFactor = 1.0;
+        renderPdfPage(1);
+        console.log('math.pdf loaded successfully!');
+      });
+
+    } catch (err) {
+      console.warn('PDF Load Error:', err);
+      document.getElementById('pdfPlaceholder').innerHTML =
+        "Could not load PDF. Ensure <b>math.pdf</b> is in the <b>static</b> folder<br>" +
+        "and you are running <b>http://localhost:8000</b>";
+    }
+  }
+
+  autoLoadMathPDF();
 </script>
 </body>
 </html>

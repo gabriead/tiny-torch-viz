@@ -4,14 +4,11 @@
   <meta charset="UTF-8">
   <title>TinyTorch Visualizer</title>
 
-  <!-- KaTeX for LaTeX -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 
-  <!-- Markdown -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
-  <!-- PDF.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
@@ -1801,7 +1798,8 @@ print("logits:", logits.data)
     if (showMatrixData && mat.length > 0 && mat[0].length > 0) {
       const table = document.createElement('table');
       table.className = 'matrix-table';
-      const MAX_ROWS = 4, MAX_COLS = 6;
+      // INCREASED MAX_ROWS AND MAX_COLS TO SHOW FULL MATRICES
+      const MAX_ROWS = 100, MAX_COLS = 100;
       const totalR = mat.length, totalC = mat[0].length;
       const showR = Math.min(totalR, MAX_ROWS), showC = Math.min(totalC, MAX_COLS);
       const truncatedR = totalR > MAX_ROWS, truncatedC = totalC > MAX_COLS;
@@ -2040,6 +2038,7 @@ print("logits:", logits.data)
   }
 
   // ==================== Render Operation ====================
+  // ==================== Render Operation ====================
   function renderOp(container, op) {
     const { type, inputs, output, meta } = op;
 
@@ -2157,40 +2156,69 @@ print("logits:", logits.data)
       return;
     }
 
+    // =========================================================================
+    // FIX START: Updated Linear Layer Logic to handle flattening/reshaping
+    // =========================================================================
     if (isLinear && safeInputs[0] && safeInputs[1]) {
-      // Linear layer: show as matmul layout for W @ X.T
+      // Linear layer: show as matmul layout for W @ X.T = Y.T
       // Instrumentation inserts weight at front: inputs[0] = weight, inputs[1] = x
       const weight = safeInputs[0];
       const x = safeInputs[1];
 
-      // Create transposed version of x for visualization
-      // The computation is (W @ x.T).T, so we show x.T on top
+      // 1. Determine Feature Dimensions from Weight Shape
+      // Weight is typically (OutFeatures, InFeatures) -> e.g. (4, 1)
+      const inFeatures = weight.shape && weight.shape.length > 1 ? weight.shape[1] : 1;
+      const outFeatures = weight.shape && weight.shape.length > 0 ? weight.shape[0] : 1;
+
+      // 2. Helper to flatten any tensor to (N, Features)
+      // This merges all batch/seq dimensions into one 'N' dimension so we can visualize it as 2D
+      const flattenTo2D = (t, features) => {
+        if (!t || !t.data) return { data: [], shape: [0, features] };
+
+        // Recursively flatten the deep nested arrays into a single list
+        const flatList = [];
+        const recurse = (arr) => Array.isArray(arr) ? arr.forEach(recurse) : flatList.push(arr);
+        recurse(t.data);
+
+        // Reconstruct into rows of length 'features'
+        // If total items is 8 and features is 1, we get 8 rows of 1.
+        const numItems = Math.floor(flatList.length / features);
+        const matrix = [];
+        for (let i = 0; i < numItems; i++) {
+          matrix.push(flatList.slice(i * features, (i + 1) * features));
+        }
+        return { data: matrix, shape: [numItems, features] };
+      };
+
+      // 3. Helper to transpose a 2D matrix (data only)
+      const transposeData = (matrix) => {
+        if (!matrix || !matrix.length) return [];
+        return matrix[0].map((_, c) => matrix.map(r => r[c]));
+      };
+
+      // 4. Prepare Flattened & Transposed Tensors for Visualization
+      // We want x.T to be (InFeatures, N)
+      // We want y.T to be (OutFeatures, N)
+
+      const xFlat = flattenTo2D(x, inFeatures);
+      const yFlat = flattenTo2D(safeOutput, outFeatures);
+
+      const xTData = transposeData(xFlat.data);
+      const yTData = transposeData(yFlat.data);
+
       const xT = {
         ...(x || {}),
         name: getName(x, 'X') + '.T',
-        shape: x?.shape ? [...x.shape].reverse() : [],
-        data: x?.data || []
+        shape: [inFeatures, xFlat.shape[0]], // e.g. (1, 8)
+        data: xTData
       };
-      // Transpose the actual data for display
-      if (x?.data && Array.isArray(x.data) && x.data.length > 0) {
-        if (Array.isArray(x.data[0])) {
-          xT.data = x.data[0].map((_, colIdx) => x.data.map(row => row[colIdx]));
-        }
-      }
 
-      // Create transposed version of output for visualization
       const outputT = {
         ...(safeOutput || {}),
-        name: getName(safeOutput, 'y'),
-        shape: safeOutput?.shape ? [...safeOutput.shape].reverse() : [],
-        data: safeOutput?.data || []
+        name: getName(safeOutput, 'y') + '.T',
+        shape: [outFeatures, yFlat.shape[0]], // e.g. (4, 8)
+        data: yTData
       };
-      // Transpose the output data for display
-      if (safeOutput?.data && Array.isArray(safeOutput.data) && safeOutput.data.length > 0) {
-        if (Array.isArray(safeOutput.data[0])) {
-          outputT.data = safeOutput.data[0].map((_, colIdx) => safeOutput.data.map(row => row[colIdx]));
-        }
-      }
 
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-linear';
@@ -2200,7 +2228,7 @@ print("logits:", logits.data)
       emptyCell.className = 'linear-empty';
       wrapper.appendChild(emptyCell);
 
-      // Input X.T (top-right position) - with role for hover highlighting
+      // Input X.T (top-right position)
       const inputCard = createMatrixCard(xT.name, xT, 'auto', 'top');
       inputCard.classList.add('linear-input');
       wrapper.appendChild(inputCard);
@@ -2210,7 +2238,7 @@ print("logits:", logits.data)
       weightCard.classList.add('linear-weight');
       wrapper.appendChild(weightCard);
 
-      // Output (bottom-right) - show transposed to match W @ X.T dimensions
+      // Output Y.T (bottom-right position)
       const outputCard = createMatrixCard(outputT.name, outputT, 'auto', 'result');
       outputCard.classList.add('linear-output');
       wrapper.appendChild(outputCard);
@@ -2221,6 +2249,9 @@ print("logits:", logits.data)
       container.appendChild(wrapper);
       return;
     }
+    // =========================================================================
+    // FIX END
+    // =========================================================================
 
     if (isMatmul && safeInputs[0] && safeInputs[1]) {
       // Matrix multiplication: keep grid layout for proper alignment
@@ -2293,7 +2324,6 @@ print("logits:", logits.data)
 
     container.appendChild(grid);
   }
-
   // ==================== Box Colors ====================
   function getBoxColors(scheme) {
     const c = {

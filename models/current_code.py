@@ -1,6 +1,5 @@
-import numpy
-
 # TabPFN
+import numpy
 
 # training data
 X_train = Tensor([[1, 2, 3, 4], [5, 6, 7, 8]])
@@ -64,14 +63,25 @@ y_clean = Tensor([[1, 0, 0], [0, 0, 1]]).reshape(3, 2)
 box("y_clean", y_clean, "4")
 
 
-def label_embeddings(y_train):
-    lbl_embds = np.zeros((3, 4))
-    for (idx, row) in enumerate(y_train.data):
-        res = Tensor((row)).matmul(W_y)
-        lbl_embds[idx] = res.data
-        box("Label Embeddings", [res], "5")
+def label_embeddings(Y_in: Tensor):
+    """
+    Y_in: (n_total, 2) where columns are [y_clean, is_nan]
+    W_y:  (2, D)
+    b_y:  (D,)
+    returns: (n_total, D)
+    """
+    D = b_y.shape[0]
 
-    return Tensor(lbl_embds)
+    if Y_in.shape[-1] != 2:
+        raise ValueError(f"Expected Y_in last dim=2, got shape {Y_in.shape}")
+
+    E = Y_in.matmul(W_y) + b_y  # (n_total, D)
+
+    # optional: show each row embedding
+    for i in range(E.shape[0]):
+        box("Label Embedding", Tensor(E.data[i]), "5")
+
+    return E
 
 
 label_embeds = label_embeddings(y_clean)
@@ -130,6 +140,7 @@ def layer_norm_inplace(E: Tensor, eps=1e-5):
     box("Layer norn", [Tensor(x), Tensor(mean), Tensor(var), Tensor(x_norm)], "7")
     E.data[:] = x_norm
 
+
 def column_attention_inplace(E: Tensor):
     """
     In-place column attention:
@@ -162,6 +173,7 @@ column_attention_inplace(E)
 layer_norm_inplace(E)
 box("Updated Logits", E + 0, "5")
 
+
 def mlp_inplace(E: Tensor):
     """
     Minimal hand-friendly MLP with residual:
@@ -172,7 +184,6 @@ def mlp_inplace(E: Tensor):
     x = Tensor(E.data.copy())
     gx = gelu.forward(x).data
     E.data[:] = E.data + gx
-
 
 
 def row_attention_inplace(E: Tensor, single_eval_pos: int):
@@ -211,9 +222,8 @@ def row_attention_inplace(E: Tensor, single_eval_pos: int):
 row_attention_inplace(E, single_eval_pos=4)
 layer_norm_inplace(E)
 
-
 # 3) MLP + LN
-mlp_inplace(E)          # x <- x + GELU(x)
+mlp_inplace(E)  # x <- x + GELU(x)
 layer_norm_inplace(E)
 
 # ============================================================
@@ -223,8 +233,8 @@ layer_norm_inplace(E)
 # label token index = 2
 # ============================================================
 
-test_row_idx = 4       # 4
-label_tok_idx = 2                 # last token slot
+test_row_idx = 4  # 4
+label_tok_idx = 2  # last token slot
 
 h_test = Tensor(E.data[test_row_idx, label_tok_idx, :].reshape(1, 4))  # (1,4)
 
@@ -243,3 +253,4 @@ logits = z.matmul(W_out) + b_out  # (1,2)
 print("h_test:", h_test.data)
 print("z (GELU):", z.data)
 print("logits:", logits.data)
+

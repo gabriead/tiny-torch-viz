@@ -274,6 +274,7 @@ class Instrumentor:
         self._wrap_tensor_unary_method("reshape", "reshape")
         self._wrap_tensor_unary_method("sum", "sum")
         self._wrap_tensor_unary_method("mean", "mean")
+        self._wrap_tensor_unary_method("std", "std")
         self._wrap_tensor_unary_method("max", "max")
         self._wrap_tensor_unary_method("sqrt", "sqrt")
 

@@ -707,8 +707,12 @@ class Tensor:
         result = np.sqrt(self.data)
         return Tensor(result)
 
-    def repeat(self):
-        pass
+    def std(self, axis=None, keepdims=False) -> 'Tensor':
+        """Calculates standard deviation (traced operation)."""
+        # We implement this using NumPy for speed, but wrapped in Tensor
+        # so the visualizer sees it as a single 'std' operation.
+        out_data = np.std(self.data, axis=axis, keepdims=keepdims)
+        return Tensor(out_data)
 
 # %% [markdown]
 """

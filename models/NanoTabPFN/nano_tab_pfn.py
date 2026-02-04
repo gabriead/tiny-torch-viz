@@ -1,3 +1,8 @@
+# Code loads here
+# Code loads here
+# Code loads here
+# Code loads here
+# Code loads here
 import numpy
 
 input_data = input_data = Tensor([
@@ -8,7 +13,7 @@ input_data = input_data = Tensor([
         [33.3, 2.2]
     ]
 ])
-y = Tensor([[3], [3.1], [6.7], [-1]])
+y = Tensor([[[3], [3.1], [6.7], [-1]]])
 
 box("input_data", [input_data, y])
 

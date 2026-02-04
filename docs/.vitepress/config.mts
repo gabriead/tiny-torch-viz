@@ -11,7 +11,7 @@ export default defineConfig({
     // Top Navigation Bar
     nav: [
       { text: 'Guide', link: '/guide/what-is-it' },
-      { text: 'Launch App', link: '/app/index.html', target: '_blank' },
+      { text: 'Launch App', link: '/app/index_claude.html', target: '_blank' },
       { text: 'GitHub', link: 'https://github.com/gabriead/aibyhand' }
     ],
 

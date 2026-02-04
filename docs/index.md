@@ -8,7 +8,7 @@ hero:
   actions:
     - theme: brand
       text: Launch App
-      link: /app/index.html
+      link: /app/index_claude.html
       target: _blank
     - theme: alt
       text: Read the Guide

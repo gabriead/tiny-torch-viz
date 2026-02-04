@@ -5,6 +5,7 @@
   <title>TinyTorch Visualizer</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
   <style>
@@ -63,10 +64,9 @@
     .matrix-shape { color: #64748b; font-weight: 500; }
     .matrix-table { border-collapse: collapse; font-size: 13px; }
     .matrix-table td { border: 1px solid #334155; padding: 6px 8px; text-align: right; background: #0f1419; min-width: 50px; transition: background-color 0.15s ease, box-shadow 0.15s ease; }
-    .matrix-table td.highlight-row { background: rgba(59, 130, 246, 0.3) !important; box-shadow: inset 0 0 0 1px #3b82f6 !important; }
-    .matrix-table td.highlight-col { background: rgba(16, 185, 129, 0.3) !important; box-shadow: inset 0 0 0 1px #10b981 !important; }
-    .matrix-table td.highlight-cell { background: rgba(251, 191, 36, 0.4) !important; box-shadow: inset 0 0 0 2px #fbbf24 !important; }
-    .matrix-card.tensor-flow-highlight { box-shadow: 0 0 0 3px #f59e0b, 0 0 20px rgba(245, 158, 11, 0.5); border-color: #f59e0b; transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+    .matrix-table td.highlight-row { background: rgba(59, 130, 246, 0.3); box-shadow: inset 0 0 0 1px #3b82f6; }
+    .matrix-table td.highlight-col { background: rgba(16, 185, 129, 0.3); box-shadow: inset 0 0 0 1px #10b981; }
+    .matrix-table td.highlight-cell { background: rgba(251, 191, 36, 0.4); box-shadow: inset 0 0 0 2px #fbbf24; }
 
     .layout-grid { display: inline-grid; gap: 8px; }
     .layout-binary { grid-template-columns: auto auto; grid-template-rows: auto auto; }
@@ -111,23 +111,20 @@
     .note-modal-backdrop.show { display: flex; }
     .note-modal { width: min(640px, 90vw); background: #020617; border-radius: 12px; padding: 20px; }
     .note-modal-title { font-size: 14px; font-weight: 600; color: #e5e7eb; margin-bottom: 12px; }
-    #note-modal-textarea { width: 100%; min-height: 200px; border-radius: 8px; border: 1px solid #1f2937; background: #0f1419; color: #e5e8ff; padding: 12px; font-family: monospace; font-size: 13px; margin-bottom: 12px; }
+    #note-modal-textarea { width: 100%; min-height: 200px; border-radius: 8px; border: 1px solid #1f2937; background: #0f1419; color: #e5e7eb; padding: 12px; font-family: monospace; font-size: 13px; margin-bottom: 12px; }
     .note-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
     .note-modal-btn { border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
     #note-modal-cancel { background: #374151; color: #e5e7eb; }
     #note-modal-delete { background: #dc2626; color: white; }
     #note-modal-save { background: #3b82f6; color: white; }
 
-    /* Retro Mode */
-    :root { --retro-glass-bg: rgba(15, 15, 20, 0.65); --retro-glass-border: rgba(255, 255, 255, 0.08); --retro-neon-green: #00ff41; --retro-neon-blue: #00f3ff; --retro-text-primary: #e0e0e0; }
+    /* RETRO MODE */
     body.retro-mode { background-color: #050505; background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.15) 50%), linear-gradient(90deg, rgba(255,0,0,0.03), rgba(0,255,0,0.02), rgba(0,0,255,0.03)); background-size: 100% 2px, 3px 100%; }
     body.retro-mode #canvas { background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.08) 50%), linear-gradient(#0a0f0a 1px, transparent 1px), linear-gradient(90deg, #0a0f0a 1px, transparent 1px); background-size: 100% 2px, 30px 30px, 30px 30px; }
-    body.retro-mode #editor { background: var(--retro-glass-bg); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-left: 1px solid var(--retro-glass-border); box-shadow: -8px 0 32px rgba(0, 0, 0, 0.4); }
-    body.retro-mode .matrix-card { background: var(--retro-glass-bg); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid var(--retro-glass-border); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); }
-    body.retro-mode .matrix-table td.highlight-row { background: rgba(0, 255, 255, 0.2) !important; box-shadow: inset 0 0 0 1px #00ffff, 0 0 8px rgba(0, 255, 255, 0.3) !important; }
-    body.retro-mode .matrix-table td.highlight-col { background: rgba(255, 0, 255, 0.2) !important; box-shadow: inset 0 0 0 1px #ff00ff, 0 0 8px rgba(255, 0, 255, 0.3) !important; }
-    body.retro-mode .matrix-table td.highlight-cell { background: rgba(255, 255, 0, 0.3) !important; box-shadow: inset 0 0 0 2px #ffff00, 0 0 12px rgba(255, 255, 0, 0.5) !important; }
-    body.retro-mode .matrix-card.tensor-flow-highlight { box-shadow: 0 0 0 3px #00ff00, 0 0 25px rgba(0, 255, 0, 0.6); border-color: #00ff00; }
+    body.retro-mode #editor, body.retro-mode #toolbar, body.retro-mode .matrix-card { background: rgba(15, 15, 20, 0.65); backdrop-filter: blur(12px); border-color: rgba(255, 255, 255, 0.08); }
+    body.retro-mode .group-container { background: rgba(10, 15, 10, 0.5); border: 1px solid rgba(0, 255, 65, 0.15); box-shadow: 0 0 20px rgba(0, 255, 65, 0.05); }
+    body.retro-mode .matrix-table td { color: #00ff41; border-color: rgba(0, 255, 65, 0.2); }
+    body.retro-mode .group-label { color: #00f3ff; text-shadow: 0 0 4px rgba(0, 243, 255, 0.4); }
   </style>
 </head>
 <body>
@@ -204,17 +201,15 @@
   var ws = null;
   var wsConnected = false;
 
-  // ==================== Tensor to 2D (Visual Squeeze) ====================
-  // Generates the 2D grid data ONLY. Does NOT affect the label.
+  // ==================== Tensor to 2D (FIXED) ====================
   function tensorTo2D(t, orientation) {
     orientation = orientation || 'auto';
     if (!t || !t.data) return { mat: [[]], shape: [] };
 
-    // Deep copy data
     var data = JSON.parse(JSON.stringify(t.data));
     var shape = t.shape ? t.shape.slice() : [];
 
-    // 1. GLOBAL SQUEEZE: Remove ALL dims of size 1
+    // 1. GLOBAL SQUEEZE (Recursive)
     function squeeze(arr, currentDims) {
         if (currentDims.length === 0) return arr;
         if (currentDims[0] === 1) {
@@ -229,6 +224,7 @@
         }
     }
 
+    // Check if we need to squeeze 1s (like (1, 4, 2, 1))
     var hasOne = false;
     for (var i = 0; i < shape.length; i++) { if (shape[i] === 1) hasOne = true; }
 
@@ -239,10 +235,14 @@
         shape = newShape;
     }
 
-    // 2. SLICE BATCHES (Show Batch 0 if still > 2D)
+    // 2. SLICE BATCHES (Show Batch 0)
+    // If shape is still > 2D (e.g. 32, 4, 2), slice it down.
     while (shape.length > 2) {
-        if (Array.isArray(data) && data.length > 0) data = data[0];
-        else data = [];
+        if (Array.isArray(data) && data.length > 0) {
+            data = data[0];
+        } else {
+            data = [];
+        }
         shape.shift();
     }
 
@@ -250,9 +250,11 @@
     var rows = 1, cols = 1;
     var grid = [];
 
-    if (shape.length === 0) { // Scalar
+    if (shape.length === 0) {
+        // Scalar
         grid = [[data]];
-    } else if (shape.length === 1) { // Vector
+    } else if (shape.length === 1) {
+        // Vector
         if (orientation === 'row') {
             rows = 1; cols = shape[0];
             grid = [data];
@@ -261,11 +263,13 @@
             grid = [];
             for(var i=0; i<data.length; i++) grid.push([data[i]]);
         }
-    } else { // Matrix
+    } else {
+        // Matrix
         rows = shape[0]; cols = shape[1];
         grid = data;
     }
 
+    // 4. STRINGIFY
     var mat = [];
     for (var r = 0; r < rows; r++) {
       var rowArr = [];
@@ -280,39 +284,6 @@
     return { mat: mat, shape: shape };
   }
 
-  // Helper: Properly create transposed tensor for display
-  function createTransposedTensorForDisplay(t, label) {
-    if (!t || !t.data) return null;
-
-    var result = tensorTo2D(t, 'auto');
-    var mat = result.mat;
-    if (!mat.length) return null;
-
-    var rows = mat.length;
-    var cols = mat[0].length;
-
-    // Create truly transposed data
-    var transposedData = [];
-    for(var c=0; c<cols; c++) {
-        var newRow = [];
-        for(var r=0; r<rows; r++) {
-            newRow.push(parseFloat(mat[r][c]) || 0);
-        }
-        transposedData.push(newRow);
-    }
-
-    // Create transposed shape
-    var originalShape = t.shape || [];
-    var transposedShape = originalShape.slice().reverse();
-
-    return {
-        id: t.id + '_T',
-        name: label || ((t.name || 'X') + '.T'),
-        shape: transposedShape,
-        data: transposedData
-    };
-  }
-
   // ==================== Create Matrix Card ====================
   function createMatrixCard(label, tensor, orientation, role) {
     orientation = orientation || 'auto';
@@ -320,19 +291,16 @@
     var mat = result.mat;
     var displayShape = result.shape;
 
-    // FIX: Use Real Shape for Label
-    var realShape = (tensor && tensor.shape) ? tensor.shape : [];
-    var shapeStr = realShape.length > 0 ? realShape.join('×') : '';
-
-    var originalRank = realShape.length;
+    // Check original rank for Stack Effect (Batch indicator)
+    var originalRank = tensor && tensor.shape ? tensor.shape.length : 0;
     var isBatched = originalRank > 2;
 
+    var shapeStr = displayShape.join('×');
     var card = document.createElement('div');
     card.className = 'matrix-card' + (isBatched ? ' is-batched' : '');
 
     if (role) card.dataset.role = role;
     if (tensor && tensor.id) card.dataset.tensorId = String(tensor.id);
-    if (tensor && tensor.name) card.dataset.tensorName = tensor.name;
 
     var titleHtml = '<span>' + label + '</span>';
     titleHtml += '<span class="matrix-shape">' + shapeStr + '</span>';
@@ -376,7 +344,7 @@
     return card;
   }
 
-  // ==================== Render Op (Logic Fixed) ====================
+  // ==================== Render Op (Safe) ====================
   function renderOp(container, op) {
     var type = op.type;
     var inputs = op.inputs;
@@ -407,36 +375,11 @@
             else if (meta.dim !== undefined) axis = meta.dim;
             else if (meta.arg0 !== undefined) axis = meta.arg0;
         }
-        // Force Row if Axis 0 reduced
         if (axis === 0) outputOrientation = 'row';
         else if (axis === 1 || axis === -1) outputOrientation = 'col';
     }
 
-    // --- Linear Layer Fix: Weight × Input.T = Output ---
-    if (isLinear) {
-        var weight = safeInputs[0];
-        var x = safeInputs[1];
-        var wrapper = document.createElement('div'); wrapper.className = 'layout-linear';
-        var empty = document.createElement('div'); empty.className = 'linear-empty'; wrapper.appendChild(empty);
-
-        // Create properly transposed Input for display
-        var xT = createTransposedTensorForDisplay(x, 'Input.T');
-        var top = createMatrixCard('Input.T', xT, 'auto', 'top');
-        top.classList.add('linear-top'); wrapper.appendChild(top);
-
-        var left = createMatrixCard('Weight', weight, 'auto', 'left');
-        left.classList.add('linear-left'); wrapper.appendChild(left);
-
-        var res = createMatrixCard('Output', safeOutput, 'auto', 'result');
-        res.classList.add('linear-result'); wrapper.appendChild(res);
-
-        setupLinearHover(wrapper, left, top, res);
-        container.appendChild(wrapper);
-        return;
-    }
-
-    // --- Unary/Reduction ---
-    if (!isElementwise && !isMatmul && !isLoss) {
+    if (!isElementwise && !isMatmul && !isLoss && !isLinear) {
         var grid = document.createElement('div');
         grid.className = 'layout-grid layout-unary';
 
@@ -484,7 +427,6 @@
         return;
     }
 
-    // --- Standard Binary ---
     if (isElementwise) {
         var wrapper = document.createElement('div');
         wrapper.className = 'layout-elementwise';
@@ -520,6 +462,22 @@
         setupMatmulHover(grid, left, top, res);
         container.appendChild(grid);
     }
+    else if (isLinear) {
+        var weight = safeInputs[0];
+        var x = safeInputs[1];
+        var wrapper = document.createElement('div'); wrapper.className = 'layout-linear';
+        var empty = document.createElement('div'); empty.className = 'linear-empty'; wrapper.appendChild(empty);
+
+        var xName = getName(x, 'X') + '.T';
+        var top = createMatrixCard(xName, x, 'auto', 'top');
+        top.classList.add('linear-top'); wrapper.appendChild(top);
+        var left = createMatrixCard(getName(weight, 'W'), weight, 'auto', 'left');
+        left.classList.add('linear-left'); wrapper.appendChild(left);
+        var res = createMatrixCard(getName(safeOutput, type), safeOutput, 'auto', 'result');
+        res.classList.add('linear-result'); wrapper.appendChild(res);
+        setupMatmulHover(wrapper, left, top, res);
+        container.appendChild(wrapper);
+    }
     else if (isLoss) {
         var wrapper = document.createElement('div'); wrapper.className = 'layout-loss';
         var left = createMatrixCard('Prediction', safeInputs[0], 'auto', 'input');
@@ -532,7 +490,7 @@
     }
   }
 
-  // ==================== Hover Logics (FIXED for Linear Layer) ====================
+  // ==================== Hover Logics (Robust Visual) ====================
   function setupReductionHover(inputCard, outputCard) {
     var outTable = outputCard.querySelector('.matrix-table');
     var inTable = inputCard.querySelector('.matrix-table');
@@ -557,24 +515,19 @@
                 var c = parseInt(cell.dataset.col);
                 cell.classList.add('highlight-cell');
 
-                // Case 1: Output is Row Vector (Vertical Reduction) -> Highlight Entire Column
-                // Note: outShape.rows == 1 means we collapsed rows
-                if (outShape.rows === 1 && inShape.rows > 1) {
+                // Visual shape comparison handles squeezing logic automatically
+                if (inShape.rows > outShape.rows && inShape.cols === outShape.cols) {
                     var targets = inTable.querySelectorAll('td[data-col="' + c + '"]');
                     for(var k=0; k<targets.length; k++) targets[k].classList.add('highlight-col');
                 }
-                // Case 2: Output is Column Vector (Horizontal Reduction) -> Highlight Entire Row
-                // Note: outShape.cols == 1 means we collapsed columns
-                else if (outShape.cols === 1 && inShape.cols > 1) {
+                else if (inShape.cols > outShape.cols && inShape.rows === outShape.rows) {
                     var targets = inTable.querySelectorAll('td[data-row="' + r + '"]');
                     for(var k=0; k<targets.length; k++) targets[k].classList.add('highlight-row');
                 }
-                // Case 3: Batch Reduction (Shapes identical) -> Highlight same cell
                 else if (inShape.rows === outShape.rows && inShape.cols === outShape.cols) {
                     var target = inTable.querySelector('td[data-row="' + r + '"][data-col="' + c + '"]');
                     if (target) target.classList.add('highlight-cell');
                 }
-                // Case 4: Scalar reduction -> Highlight everything
                 else {
                     var all = inTable.querySelectorAll('td');
                     for(var k=0; k<all.length; k++) all[k].classList.add('highlight-cell');
@@ -623,7 +576,7 @@
                     var inTable = inputTables[j];
                     var dims = getDims(inTable);
                     var inR = r, inC = c;
-                    // Fix Broadcasting Logic:
+                    // Broadcasting Modulo Logic
                     if (dims.rows === 1) inR = 0; else if (r >= dims.rows) inR = r % dims.rows;
                     if (dims.cols === 1) inC = 0; else if (c >= dims.cols) inC = c % dims.cols;
 
@@ -639,56 +592,6 @@
                 }
             });
         })(outCells[i]);
-    }
-  }
-
-  function setupLinearHover(wrapper, weightCard, inputTCard, resultCard) {
-    var resTable = resultCard.querySelector('.matrix-table');
-    if (!resTable) return;
-    var weightTable = weightCard ? weightCard.querySelector('.matrix-table') : null;
-    var inputTTable = inputTCard ? inputTCard.querySelector('.matrix-table') : null;
-
-    if (!weightTable || !inputTTable) return;
-
-    var cells = resTable.querySelectorAll('td[data-row][data-col]');
-    for(var i=0; i<cells.length; i++) {
-        (function(cell){
-            cell.style.cursor = 'pointer';
-            cell.addEventListener('mouseenter', function() {
-                var r = parseInt(cell.dataset.row);  // row in output
-                var c = parseInt(cell.dataset.col);  // column in output
-                cell.classList.add('highlight-cell');
-
-                // For Weight × Input.T = Output:
-                // - Output cell [r][c] comes from:
-                //   - Weight row r (highlight that row)
-                //   - Input.T column c (but Input.T is transposed, so this corresponds to Input row c)
-                //   Actually, since we're showing Input.T visually, column c in Input.T is row c in the original Input
-
-                // Highlight the corresponding row in Weight
-                if (weightTable) {
-                    var weightRows = weightTable.querySelectorAll('td[data-row="' + r + '"]');
-                    for(var k=0; k<weightRows.length; k++) weightRows[k].classList.add('highlight-row');
-                }
-
-                // Highlight the corresponding column in Input.T (which is visually correct)
-                if (inputTTable) {
-                    var inputTCols = inputTTable.querySelectorAll('td[data-col="' + c + '"]');
-                    for(var k=0; k<inputTCols.length; k++) inputTCols[k].classList.add('highlight-col');
-                }
-            });
-            cell.addEventListener('mouseleave', function() {
-                cell.classList.remove('highlight-cell');
-                if (weightTable) {
-                    var rows = weightTable.querySelectorAll('.highlight-row');
-                    for(var k=0; k<rows.length; k++) rows[k].classList.remove('highlight-row');
-                }
-                if (inputTTable) {
-                    var cols = inputTTable.querySelectorAll('.highlight-col');
-                    for(var k=0; k<cols.length; k++) cols[k].classList.remove('highlight-col');
-                }
-            });
-        })(cells[i]);
     }
   }
 
@@ -753,7 +656,8 @@
     }
   }
 
-  // ==================== Layout (Full Feature Restored) ====================
+  // ==================== Layout & Standard Functions ====================
+
   function renderFirstPass() {
     var canvas = document.getElementById('canvas');
     canvas.innerHTML = '';
@@ -842,168 +746,15 @@
     });
 
     renderFinal(groupElById);
-    setupTensorFlowHighlighting();
   }
 
-  // --- RESTORED: Full Auto-Layout Logic ---
   function createPendingBoxes(groupElById) {
-    var PAD=20, LABEL_H=24, CHILD_GAP_X=30, COL_GAP=30, CHILD_GAP_Y=20, ROW_GAP=30, LEFT_MARGIN=80;
-    var layoutCursorY = 100;
-    var claimedGroupIds = new Set();
-
-    function getGroupIdsForTensors(tensorIds) {
-      var gids = [];
-      var visited = new Set();
-      var tensorIdSet = new Set(tensorIds);
-      var otherBoxTensorIds = new Set();
-      pendingBoxes.forEach(function(pb){
-          pb.tensorIds.forEach(function(tid){ if(!tensorIdSet.has(tid)) otherBoxTensorIds.add(tid); });
-      });
-
-      function addGroup(tid, isExplicit) {
-        if (visited.has(tid)) return;
-        visited.add(tid);
-        if (!isExplicit && otherBoxTensorIds.has(tid)) return;
-
-        var g = groups.find(function(gr){ return gr.outputId === tid; });
-        if (g && !gids.includes(g.id) && !claimedGroupIds.has(g.id)) {
-            if(g.inputIds) g.inputIds.forEach(function(inId){ addGroup(inId, false); });
-            gids.push(g.id);
-        }
+      var PAD=20, LABEL_H=24, LEFT_MARGIN=80;
+      var layoutCursorY = 100;
+      var orphanGroupIds = groups.map(function(g){return g.id;});
+      if (orphanGroupIds.length > 0) {
+          layoutGroupsTwoColumns(orphanGroupIds, groupElById, layoutCursorY, LEFT_MARGIN);
       }
-      tensorIds.forEach(function(tid){ addGroup(tid, true); });
-      return gids;
-    }
-
-    // 1. Detect hierarchy
-    pendingBoxes.forEach(function(parent){
-        parent.detectedChildren = [];
-        var parentSet = new Set(parent.tensorIds || []);
-        pendingBoxes.forEach(function(child){
-            if(parent===child) return;
-            var childSet = child.tensorIds || [];
-            if(childSet.length===0) return;
-            var allContained = childSet.every(function(tid){ return parentSet.has(tid); });
-            if(allContained && parentSet.size > childSet.size) {
-                child.parent = parent.label;
-            }
-        });
-    });
-
-    var rootBoxes = pendingBoxes.filter(function(pb){ return !pb.parent; });
-
-    function createBoxHierarchy(pending, startY, startX) {
-        var contentTop = startY + LABEL_H + PAD;
-        var children = pendingBoxes.filter(function(p){ return p.parent === pending.label; });
-        var allGroupIds = getGroupIdsForTensors(pending.tensorIds);
-
-        var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        var cursorY = contentTop;
-        var cursorX = startX + PAD;
-
-        function includeRect(x1, y1, x2, y2) {
-            minX = Math.min(minX, x1); minY = Math.min(minY, y1);
-            maxX = Math.max(maxX, x2); maxY = Math.max(maxY, y2);
-        }
-
-        var box = {
-            id: 'b' + nextBoxId++, label: pending.label, scheme: pending.scheme || '1',
-            x: startX, y: startY, w: 100, h: 100,
-            groupIds: [], childBoxIds: [], fromCode: true
-        };
-        boxes.push(box);
-
-        var childGroupIdSet = new Set();
-        var childMaxHeight = 0;
-
-        children.forEach(function(childPending){
-            var child = createBoxHierarchy(childPending, contentTop, cursorX);
-            if(!child) return;
-            box.childBoxIds.push(child.id);
-            if(child.groupIds) child.groupIds.forEach(function(gid){ childGroupIdSet.add(gid); });
-            function collect(b) {
-                if(b.groupIds) b.groupIds.forEach(function(gid){ childGroupIdSet.add(gid); });
-                if(b.childBoxIds) b.childBoxIds.forEach(function(cid){
-                    var cb = boxes.find(function(bx){return bx.id===cid;});
-                    if(cb) collect(cb);
-                });
-            }
-            collect(child);
-            includeRect(child.x, child.y, child.x + child.w, child.y + child.h);
-            childMaxHeight = Math.max(childMaxHeight, child.h);
-            cursorX = child.x + child.w + CHILD_GAP_X;
-        });
-
-        if(children.length > 0) cursorY = contentTop + childMaxHeight + CHILD_GAP_Y;
-
-        var ownGroupIds = allGroupIds.filter(function(id){ return !childGroupIdSet.has(id); });
-
-        if (ownGroupIds.length > 0) {
-            var nLeft = Math.ceil(ownGroupIds.length / 2);
-            var leftIds = ownGroupIds.slice(0, nLeft);
-            var rightIds = ownGroupIds.slice(nLeft);
-
-            var leftX = startX + PAD;
-            var yL = cursorY;
-            var maxLeftW = 0;
-
-            leftIds.forEach(function(gid){
-                var g = groups.find(function(gr){return gr.id===gid;});
-                var el = groupElById[gid];
-                if(g && el) {
-                    g.x = leftX; g.y = yL;
-                    el.style.left = g.x+'px'; el.style.top = g.y+'px';
-                    maxLeftW = Math.max(maxLeftW, el.offsetWidth);
-                    includeRect(g.x, g.y, g.x + el.offsetWidth, g.y + el.offsetHeight);
-                    yL += el.offsetHeight + ROW_GAP;
-                }
-            });
-
-            var rightX = leftX + maxLeftW + COL_GAP;
-            var yR = cursorY;
-
-            rightIds.forEach(function(gid){
-                var g = groups.find(function(gr){return gr.id===gid;});
-                var el = groupElById[gid];
-                if(g && el) {
-                    g.x = rightX; g.y = yR;
-                    el.style.left = g.x+'px'; el.style.top = g.y+'px';
-                    includeRect(g.x, g.y, g.x + el.offsetWidth, g.y + el.offsetHeight);
-                    yR += el.offsetHeight + ROW_GAP;
-                }
-            });
-
-            box.groupIds = ownGroupIds;
-            ownGroupIds.forEach(function(gid){ claimedGroupIds.add(gid); });
-            cursorY = Math.max(yL, yR);
-        }
-
-        if(isFinite(minX)) {
-            box.x = minX - PAD;
-            box.y = minY - PAD - LABEL_H;
-            box.w = (maxX - minX) + 2*PAD;
-            box.h = (maxY - minY) + 2*PAD + LABEL_H;
-        } else {
-            box.w = 200; box.h = 100;
-        }
-        return box;
-    }
-
-    if(rootBoxes.length > 0) {
-        rootBoxes.forEach(function(root){
-            var b = createBoxHierarchy(root, layoutCursorY, LEFT_MARGIN);
-            if(b) layoutCursorY = b.y + b.h + 50;
-        });
-        pendingBoxes.length = 0;
-    }
-
-    var groupsInBoxes = new Set();
-    boxes.forEach(function(b){ if(b.groupIds) b.groupIds.forEach(function(gid){ groupsInBoxes.add(gid); }); });
-    var orphanGroupIds = groups.filter(function(g){ return !groupsInBoxes.has(g.id); }).map(function(g){ return g.id; });
-
-    if(orphanGroupIds.length > 0) {
-        layoutGroupsTwoColumns(orphanGroupIds, groupElById, layoutCursorY, LEFT_MARGIN);
-    }
   }
 
   function layoutGroupsTwoColumns(groupIds, groupElById, startY, leftMargin) {
@@ -1038,39 +789,7 @@
       });
   }
 
-  // --- Tensor Flow Highlight ---
-  function setupTensorFlowHighlighting() {
-    var content = document.getElementById('canvas-content');
-    if(!content) return;
-    var allCards = Array.from(content.querySelectorAll('.matrix-card'));
-    var labelMap = {};
-
-    allCards.forEach(function(card){
-        var title = card.querySelector('.matrix-title span');
-        if(!title) return;
-        var label = title.textContent.trim().replace(/\.T$/, '');
-        if(!labelMap[label]) labelMap[label] = [];
-        labelMap[label].push(card);
-    });
-
-    allCards.forEach(function(card){
-        var title = card.querySelector('.matrix-title span');
-        if(!title) return;
-        var label = title.textContent.trim().replace(/\.T$/, '');
-        var matches = labelMap[label] || [];
-        if(matches.length > 1) {
-            card.style.cursor = 'pointer';
-            card.addEventListener('mouseenter', function(){
-                matches.forEach(function(c){ c.classList.add('tensor-flow-highlight'); });
-            });
-            card.addEventListener('mouseleave', function(){
-                matches.forEach(function(c){ c.classList.remove('tensor-flow-highlight'); });
-            });
-        }
-    });
-  }
-
-  // Toolbar & Rest of UI
+  // Toolbar
   function createToolbar() {
     var toolbar = document.createElement('div');
     toolbar.id = 'toolbar';
@@ -1084,6 +803,8 @@
     }
 
     addBtn('Select', function(){ currentTool='select'; selectedGroupIds.clear(); selectedBoxIds.clear(); render(); }, true, 'select');
+    // ADDED GROUP BUTTON TO ENABLE BOX DRAWING
+    addBtn('Group', createBoxFromSelection);
     addBtn('Add Note', addNote);
     addBtn('Export JSON', exportJson);
     addBtn('Load JSON', function(){ document.getElementById('jsonFileInput').click(); });
@@ -1132,25 +853,16 @@
   function renderFinal(groupElById) {
     var content = document.getElementById('canvas-content');
 
-    // Sort: Larger boxes first
-    var sortedBoxes = boxes.slice().sort(function(a,b){
-        return (b.w*b.h) - (a.w*a.h);
-    });
-
-    sortedBoxes.forEach(function(box) {
+    // Boxes
+    boxes.forEach(function(box) {
         var colors = { border:'rgba(56,189,248,0.9)', bg:'rgba(15,23,42,0.45)', label:'#7dd3fc' };
-        if(box.scheme === '2') colors = { border:'rgba(34,197,94,0.85)', bg:'rgba(5,46,22,0.5)', label:'#bbf7d0' };
-        if(box.scheme === '3') colors = { border:'rgba(249,115,22,0.9)', bg:'rgba(67,20,7,0.55)', label:'#fed7aa' };
-        if(box.scheme === '4') colors = { border:'rgba(129,140,248,0.9)', bg:'rgba(30,64,175,0.5)', label:'#e0e7ff' };
-        if(box.scheme === '5') colors = { border:'rgba(244,114,182,0.9)', bg:'rgba(131,24,67,0.5)', label:'#fce7f3' };
-        if(box.scheme === '6') colors = { border:'rgba(248,113,113,0.9)', bg:'rgba(127,29,29,0.5)', label:'#fee2e2' };
-
         var el = document.createElement('div');
         el.className = 'layer-box';
-        if(selectedBoxIds.has(box.id)) el.classList.add('layer-box-selected');
         el.style.left = box.x+'px'; el.style.top = box.y+'px';
         el.style.width = box.w+'px'; el.style.height = box.h+'px';
         el.style.borderColor = colors.border; el.style.background = colors.bg;
+
+        if (selectedBoxIds.has(box.id)) el.classList.add('layer-box-selected');
 
         var lbl = document.createElement('div');
         lbl.className = 'layer-box-label';
@@ -1158,28 +870,26 @@
         lbl.style.color = colors.label;
         el.appendChild(lbl);
 
-        // Attach Box Drag
         lbl.onmousedown = function(e) {
             e.preventDefault(); e.stopPropagation();
             selectedBoxIds.clear(); selectedBoxIds.add(box.id);
             el.classList.add('layer-box-selected');
             var startX = e.clientX, startY = e.clientY;
-            var startXBox = box.x, startYBox = box.y;
-            // Simple drag for now (no group moving)
+            var origX = box.x, origY = box.y;
+            // Simplified box move logic
             function onMove(ev) {
-                var dx = (ev.clientX - startX)/zoomLevel;
-                var dy = (ev.clientY - startY)/zoomLevel;
-                box.x = startXBox + dx; box.y = startYBox + dy;
+                box.x = origX + (ev.clientX - startX)/zoomLevel;
+                box.y = origY + (ev.clientY - startY)/zoomLevel;
                 el.style.left = box.x+'px'; el.style.top = box.y+'px';
             }
-            function onUp() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); }
+            function onUp() { window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); }
             window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
         };
 
         content.insertBefore(el, content.firstChild);
     });
 
-    // Group drag
+    // Drag logic for groups
     groups.forEach(function(g){
         var el = groupElById[g.id];
         if(!el) return;
@@ -1187,6 +897,11 @@
         if(labelEl) {
             labelEl.onmousedown = function(e) {
                 e.preventDefault(); e.stopPropagation();
+                if(currentTool === 'select') {
+                    if(!e.ctrlKey) selectedGroupIds.clear();
+                    selectedGroupIds.add(g.id);
+                    el.classList.add('group-selected');
+                }
                 var startX = e.clientX, startY = e.clientY;
                 var origX = g.x, origY = g.y;
                 function onMove(ev) {
@@ -1198,6 +913,7 @@
                 window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
             };
         }
+        if(selectedGroupIds.has(g.id)) el.classList.add('group-selected');
     });
 
     // Notes
@@ -1258,6 +974,32 @@
       render();
   };
 
+  // Box Creation (restored)
+  function createBoxFromSelection() {
+      if(selectedGroupIds.size === 0) { alert('Select groups first to create a box.'); return; }
+      var label = prompt('Box Label:', 'Layer ' + (boxes.length+1));
+      if(!label) return;
+
+      // Compute bounds
+      var minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+      var groupIdsArr = [];
+      selectedGroupIds.forEach(function(gid){
+          groupIdsArr.push(gid);
+          var g = groups.find(function(gr){return gr.id===gid;});
+          if(g) { minX=Math.min(minX,g.x); minY=Math.min(minY,g.y); maxX=Math.max(maxX,g.x+200); maxY=Math.max(maxY,g.y+150); }
+      });
+
+      boxes.push({
+          id:'b'+nextBoxId++,
+          label: label,
+          x: minX - 20, y: minY - 40,
+          w: (maxX-minX) + 40, h: (maxY-minY) + 60,
+          groupIds: groupIdsArr
+      });
+      selectedGroupIds.clear();
+      render();
+  }
+
   // Export/Import JSON (safe)
   function exportJson() {
       var state = {
@@ -1270,25 +1012,6 @@
       a.download = 'tinytorch-dump.json';
       a.click();
   }
-
-  document.getElementById('jsonFileInput').onchange = function(e) {
-      var file = e.target.files[0];
-      if(!file) return;
-      var reader = new FileReader();
-      reader.onload = function(ev) {
-          try {
-              var state = JSON.parse(ev.target.result);
-              if(state.code) document.getElementById('code').value = state.code;
-              if(state.tensors) tensors = state.tensors;
-              if(state.groups) groups = state.groups;
-              if(state.boxes) boxes = state.boxes;
-              if(state.notes) canvasNotes = state.notes;
-              skipLayout = true;
-              render();
-          } catch(err) { alert('Load Error'); }
-      };
-      reader.readAsText(file);
-  };
 
   // WebSocket
   function connectWebSocket() {
@@ -1307,15 +1030,10 @@
           tensors[msg.id] = { id:msg.id, shape:msg.shape, data:msg.data, name:msg.name };
       } else if(msg.event === 'op') {
           groups.push({ id:'g'+nextGroupId++, opType:msg.type, inputIds:msg.inputs, outputId:msg.output, meta:msg.meta||{}, x:0, y:0 });
-      } else if(msg.event === 'box') {
-          pendingBoxes.push({ label:msg.label, tensorIds:msg.tensors, scheme:msg.scheme||'1', parent:msg.parentBox });
       } else if(msg.event === 'done') {
           render();
       } else if(msg.event === 'print') {
           var div = document.createElement('div'); div.className='console-line'; div.textContent=msg.text;
-          document.getElementById('console-output').appendChild(div);
-      } else if(msg.event === 'error') {
-          var div = document.createElement('div'); div.className='console-line error'; div.textContent=msg.message;
           document.getElementById('console-output').appendChild(div);
       }
   }
@@ -1354,6 +1072,7 @@
       });
   }
 
+  // Restore retro mode
   if (localStorage.getItem('retroMode') === '1') document.body.classList.add('retro-mode');
   connectWebSocket();
   autoLoadMathPDF();

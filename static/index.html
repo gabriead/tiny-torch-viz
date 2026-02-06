@@ -2039,6 +2039,7 @@ print("logits:", logits.data)
 
   // ==================== Render Operation ====================
   // ==================== Render Operation ====================
+  // ==================== Render Operation ====================
   function renderOp(container, op) {
     const { type, inputs, output, meta } = op;
 
@@ -2059,17 +2060,17 @@ print("logits:", logits.data)
 
     // Determine output orientation for reduction operations
     let outputOrientation = 'auto';
-    if (['sum', 'mean', 'max'].includes(type) && safeInputs[0] && safeOutput.shape && safeOutput.shape.length === 1) {
+    if (['sum', 'mean', 'max', 'min', 'std', 'var'].includes(type) && safeInputs[0] && safeOutput.shape && safeOutput.shape.length === 1) {
       const inputShape = safeInputs[0].shape || [];
-      const axis = meta?.axis ?? meta?.arg0;
+      const axis = meta?.axis ?? meta?.dim ?? meta?.arg0;
 
       if (inputShape.length >= 2) {
         let normalizedAxis = axis;
         if (normalizedAxis < 0) normalizedAxis = inputShape.length + normalizedAxis;
         if (normalizedAxis === 0) {
-          outputOrientation = 'row';
+          outputOrientation = 'row'; // Reduce along cols -> 1 row result
         } else {
-          outputOrientation = 'col';
+          outputOrientation = 'col'; // Reduce along rows -> 1 col result
         }
       }
     }
@@ -2082,179 +2083,130 @@ print("logits:", logits.data)
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
 
-      // Determine orientation for 1D tensors based on NumPy broadcasting rules:
-      // A 1D tensor (N,) broadcasts as (1, N) - a ROW, not a column
-      // This affects how we display the second operand (typically bias)
+      // Determine orientation for 1D tensors based on NumPy broadcasting rules
       const input0Shape = safeInputs[0].shape || [];
       const input1Shape = safeInputs[1].shape || [];
 
-      // If second input is 1D and first is 2D, display second as ROW (how NumPy broadcasts it)
       let rightOrientation = 'auto';
       if (input1Shape.length === 1 && input0Shape.length >= 2) {
-        rightOrientation = 'row';  // 1D broadcasts as row in NumPy
+        rightOrientation = 'row';  // 1D broadcasts as row
       }
 
-      // First operand (top-left)
       const left = createMatrixCard(getName(safeInputs[0]), safeInputs[0], 'auto', 'input');
       left.classList.add('elem-left');
       wrapper.appendChild(left);
 
-      // Operator symbol (top-center)
       const opSym = document.createElement('span');
       opSym.className = 'op-symbol-large elem-op';
       opSym.textContent = opSymbols[type] || '+';
       wrapper.appendChild(opSym);
 
-      // Second operand (top-right) - use row orientation for 1D bias
       const right = createMatrixCard(getName(safeInputs[1]), safeInputs[1], rightOrientation, 'input');
       right.classList.add('elem-right');
       wrapper.appendChild(right);
 
-      // Result (bottom-left, below first operand)
       const result = createMatrixCard(getName(safeOutput, type), safeOutput, outputOrientation, 'output');
       result.classList.add('elem-result');
       wrapper.appendChild(result);
 
-      // Add element-wise hover highlighting
       setupElementwiseHover([left, right], result);
-
       container.appendChild(wrapper);
       return;
     }
 
     if (isLoss && safeInputs[0] && safeInputs[1]) {
-      // Loss functions: predictions | targets, loss below
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-elementwise';
 
-      // Predictions (top-left)
       const preds = createMatrixCard(getName(safeInputs[0], 'predictions'), safeInputs[0], 'auto', 'input');
       preds.classList.add('elem-left');
       wrapper.appendChild(preds);
 
-      // Arrow or separator (optional visual)
       const arrow = document.createElement('span');
       arrow.className = 'op-symbol-large elem-op';
       arrow.textContent = '→';
-      arrow.title = 'compared to';
       wrapper.appendChild(arrow);
 
-      // Targets (top-right)
       const targs = createMatrixCard(getName(safeInputs[1], 'targets'), safeInputs[1], 'auto', 'input');
       targs.classList.add('elem-right');
       wrapper.appendChild(targs);
 
-      // Loss value (bottom-left)
       const lossCard = createMatrixCard(getName(safeOutput, 'loss'), safeOutput, 'auto', 'output');
       lossCard.classList.add('elem-result');
       wrapper.appendChild(lossCard);
 
-      // Add element-wise hover highlighting
       setupElementwiseHover([preds, targs], lossCard);
-
       container.appendChild(wrapper);
       return;
     }
 
-    // =========================================================================
-    // FIX START: Updated Linear Layer Logic to handle flattening/reshaping
-    // =========================================================================
+    // ==================== Linear Layer ====================
     if (isLinear && safeInputs[0] && safeInputs[1]) {
-      // Linear layer: show as matmul layout for W @ X.T = Y.T
-      // Instrumentation inserts weight at front: inputs[0] = weight, inputs[1] = x
       const weight = safeInputs[0];
       const x = safeInputs[1];
 
-      // 1. Determine Feature Dimensions from Weight Shape
-      // Weight is typically (OutFeatures, InFeatures) -> e.g. (4, 1)
       const inFeatures = weight.shape && weight.shape.length > 1 ? weight.shape[1] : 1;
       const outFeatures = weight.shape && weight.shape.length > 0 ? weight.shape[0] : 1;
 
-      // 2. Helper to flatten any tensor to (N, Features)
-      // This merges all batch/seq dimensions into one 'N' dimension so we can visualize it as 2D
+      // Flatten input to (N, InFeatures)
       const flattenTo2D = (t, features) => {
         if (!t || !t.data) return { data: [], shape: [0, features] };
-
-        // Recursively flatten the deep nested arrays into a single list
         const flatList = [];
         const recurse = (arr) => Array.isArray(arr) ? arr.forEach(recurse) : flatList.push(arr);
         recurse(t.data);
-
-        // Reconstruct into rows of length 'features'
-        // If total items is 8 and features is 1, we get 8 rows of 1.
         const numItems = Math.floor(flatList.length / features);
         const matrix = [];
-        for (let i = 0; i < numItems; i++) {
-          matrix.push(flatList.slice(i * features, (i + 1) * features));
-        }
+        for (let i = 0; i < numItems; i++) matrix.push(flatList.slice(i * features, (i + 1) * features));
         return { data: matrix, shape: [numItems, features] };
       };
 
-      // 3. Helper to transpose a 2D matrix (data only)
       const transposeData = (matrix) => {
         if (!matrix || !matrix.length) return [];
         return matrix[0].map((_, c) => matrix.map(r => r[c]));
       };
 
-      // 4. Prepare Flattened & Transposed Tensors for Visualization
-      // We want x.T to be (InFeatures, N)
-      // We want y.T to be (OutFeatures, N)
-
       const xFlat = flattenTo2D(x, inFeatures);
       const yFlat = flattenTo2D(safeOutput, outFeatures);
-
-      const xTData = transposeData(xFlat.data);
-      const yTData = transposeData(yFlat.data);
 
       const xT = {
         ...(x || {}),
         name: getName(x, 'X') + '.T',
-        shape: [inFeatures, xFlat.shape[0]], // e.g. (1, 8)
-        data: xTData
+        shape: [inFeatures, xFlat.shape[0]],
+        data: transposeData(xFlat.data)
       };
 
       const outputT = {
         ...(safeOutput || {}),
         name: getName(safeOutput, 'y') + '.T',
-        shape: [outFeatures, yFlat.shape[0]], // e.g. (4, 8)
-        data: yTData
+        shape: [outFeatures, yFlat.shape[0]],
+        data: transposeData(yFlat.data)
       };
 
       const wrapper = document.createElement('div');
       wrapper.className = 'layout-linear';
 
-      // Empty cell for top-left (matmul alignment)
       const emptyCell = document.createElement('div');
       emptyCell.className = 'linear-empty';
       wrapper.appendChild(emptyCell);
 
-      // Input X.T (top-right position)
       const inputCard = createMatrixCard(xT.name, xT, 'auto', 'top');
       inputCard.classList.add('linear-input');
       wrapper.appendChild(inputCard);
 
-      // Weight matrix W (left position)
       const weightCard = createMatrixCard('W', weight, 'auto', 'left');
       weightCard.classList.add('linear-weight');
       wrapper.appendChild(weightCard);
 
-      // Output Y.T (bottom-right position)
       const outputCard = createMatrixCard(outputT.name, outputT, 'auto', 'result');
       outputCard.classList.add('linear-output');
       wrapper.appendChild(outputCard);
 
-      // Add hover highlighting for matmul visualization
       setupMatmulHover(wrapper, weightCard, inputCard, outputCard);
-
       container.appendChild(wrapper);
       return;
     }
-    // =========================================================================
-    // FIX END
-    // =========================================================================
 
     if (isMatmul && safeInputs[0] && safeInputs[1]) {
-      // Matrix multiplication: keep grid layout for proper alignment
       const grid = document.createElement('div');
       grid.className = 'layout-grid layout-binary';
 
@@ -2270,30 +2222,24 @@ print("logits:", logits.data)
       res.classList.add('pos-result');
       grid.appendChild(res);
 
-      // Add hover highlighting for matmul visualization
       setupMatmulHover(grid, left, top, res);
-
       container.appendChild(grid);
       return;
     }
 
-    // Unary operations (sum, mean, max, transpose, relu, sigmoid, etc.)
+    // ==================== Unary / Reduction ====================
     const grid = document.createElement('div');
     grid.className = 'layout-grid layout-unary';
 
-    // Helper to get display name for a tensor, falling back to producer's output name
     function getInputDisplayName(tensor) {
       if (!tensor) return '?';
       if (tensor.name) return tensor.name;
-      // Look for a group that produced this tensor
       const producerGroup = groups.find(g => g.outputId === tensor.id);
       if (producerGroup) {
-        // If producer is linear, use "y" (what linear displays its output as)
         if (producerGroup.opType.toLowerCase() === 'linear') {
           const producerOutput = tensors[producerGroup.outputId];
           return producerOutput?.name || 'y';
         }
-        // For other producers, try their output tensor name
         const producerOutput = tensors[producerGroup.outputId];
         if (producerOutput?.name) return producerOutput.name;
       }
@@ -2312,10 +2258,27 @@ print("logits:", logits.data)
 
     // Add hover highlighting based on operation type
     if (type === 'transpose' && inputCards.length > 0) {
-      // Transpose: output[i,j] corresponds to input[j,i]
       setupTransposeHover(inputCards[0], outputCard);
-    } else {
-      // Element-wise activations: output[i,j] corresponds to input[i,j]
+    }
+    // START REDUCTION HOVER
+    else if (['mean', 'sum', 'max', 'min', 'std', 'var'].includes(type) && inputCards.length > 0) {
+        // Detect reduction mode by comparing rendered grid dimensions
+        // We use tensorTo2D to see how the matrix is actually visualized
+        const inMeta = tensorTo2D(safeInputs[0], 'auto');
+        const outMeta = tensorTo2D(safeOutput, outputOrientation);
+
+        // If row counts match, we are mapping Row -> Row (reducing columns)
+        if (inMeta.mat.length > 0 && outMeta.mat.length === inMeta.mat.length) {
+            setupReductionHover(inputCards[0], outputCard, 'row');
+        }
+        // If col counts match, we are mapping Col -> Col (reducing rows)
+        else if (inMeta.mat[0] && outMeta.mat[0] && outMeta.mat[0].length === inMeta.mat[0].length) {
+            setupReductionHover(inputCards[0], outputCard, 'col');
+        }
+    }
+    // END REDUCTION HOVER
+    else {
+      // Standard element-wise fallback
       const isElementwiseUnary = ['relu', 'sigmoid', 'tanh', 'gelu', 'softmax', 'logsoftmax', 'rmsnorm', 'sqrt'].includes(type);
       if (isElementwiseUnary && inputCards.length > 0) {
         setupElementwiseHover(inputCards, outputCard);
@@ -2324,6 +2287,48 @@ print("logits:", logits.data)
 
     container.appendChild(grid);
   }
+  // ==================== Reduction Hover Highlighting ====================
+  // For operations like mean, sum, max where a dimension is collapsed.
+  // mode 'row': Output[r] depends on Input[r, :] (highlight whole row r)
+  // mode 'col': Output[c] depends on Input[:, c] (highlight whole col c)
+  function setupReductionHover(inputCard, outputCard, mode) {
+    const outputTable = outputCard.querySelector('.matrix-table');
+    const inputTable = inputCard.querySelector('.matrix-table');
+    if (!outputTable || !inputTable) return;
+
+    const outputCells = outputTable.querySelectorAll('td[data-row][data-col]');
+
+    outputCells.forEach(cell => {
+      cell.style.cursor = 'pointer';
+
+      cell.addEventListener('mouseenter', () => {
+        const r = cell.dataset.row;
+        const c = cell.dataset.col;
+
+        // Highlight the result cell
+        cell.classList.add('highlight-cell');
+
+        if (mode === 'row') {
+          // Highlight the entire corresponding row in the input
+          const rowCells = inputTable.querySelectorAll(`td[data-row="${r}"]`);
+          rowCells.forEach(td => td.classList.add('highlight-cell'));
+        } else if (mode === 'col') {
+          // Highlight the entire corresponding column in the input
+          const colCells = inputTable.querySelectorAll(`td[data-col="${c}"]`);
+          colCells.forEach(td => td.classList.add('highlight-cell'));
+        }
+      });
+
+      cell.addEventListener('mouseleave', () => {
+        // Remove all highlights
+        cell.classList.remove('highlight-cell');
+        inputTable.querySelectorAll('.highlight-cell').forEach(td => {
+          td.classList.remove('highlight-cell');
+        });
+      });
+    });
+  }
+
   // ==================== Box Colors ====================
   function getBoxColors(scheme) {
     const c = {
